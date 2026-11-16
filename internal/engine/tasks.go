@@ -187,7 +187,9 @@ func runTasks(ctx context.Context, dir string, runs []TaskRun) error {
 // copy. The copy's changes against head below root (git add -A, so .gitignore decides) then
 // replace changes. The checkout's repository is only read. Submodule pointers cannot change: a
 // command that moves a submodule's HEAD fails the group, and files inside submodules never
-// become changes; the tasks' files globs limit what the commands add to changes (taskFilter),
+// become changes, so a gitlink change of the update is neither written into the copy nor read
+// back from it and is returned as it came in; the tasks' files globs limit what the commands
+// add to changes (taskFilter),
 // and a symlink they create, change or delete there fails the group. A command allow does not
 // allow fails it before anything runs; without tasks it returns changes.
 func BuildWithTasks(ctx context.Context, root, head string, ups []dep.Update, changes []FileChange, allow TaskAllowlist) ([]FileChange, error) {
@@ -218,6 +220,9 @@ func BuildWithTasks(ctx context.Context, root, head string, ups []dep.Update, ch
 	}
 	dir := filepath.Join(top, filepath.FromSlash(prefix))
 	for _, c := range changes {
+		if c.Gitlink {
+			continue // a submodule pointer is a directory in the copy, and the tasks cannot move it
+		}
 		p := filepath.Join(dir, filepath.FromSlash(c.Path))
 		if c.New == nil {
 			err = os.Remove(p)
@@ -249,7 +254,28 @@ func BuildWithTasks(ctx context.Context, root, head string, ups []dep.Update, ch
 	if err != nil {
 		return nil, err
 	}
-	return taskFilter(ups, changes, after), nil
+	return withGitlinks(taskFilter(ups, changes, after), changes), nil
+}
+
+// withGitlinks returns out with the gitlink changes of build (the submodule pointers of the
+// update, which the copy neither holds nor may move) restored, sorted by path as taskFilter
+// sorts.
+func withGitlinks(out, build []FileChange) []FileChange {
+	var links []FileChange
+	for _, c := range build {
+		if c.Gitlink {
+			links = append(links, c)
+		}
+	}
+	if len(links) == 0 {
+		return out
+	}
+	out = slices.DeleteFunc(slices.Clone(out), func(c FileChange) bool {
+		return slices.ContainsFunc(links, func(l FileChange) bool { return l.Path == c.Path })
+	})
+	out = append(out, links...)
+	slices.SortFunc(out, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
+	return out
 }
 
 // copySkip is the toolrun.CopyTree filter for the work tree top: .git, and the entries git

@@ -115,6 +115,47 @@ func TestBuildWithTasksSubmodules(t *testing.T) {
 	}
 }
 
+// A gitlink change of the update survives the tasks unchanged, with and without files globs:
+// it is never written into the copy (where its path is a directory) and never read back.
+func TestBuildWithTasksGitlink(t *testing.T) {
+	sub := t.TempDir()
+	old := repo(t, sub, map[string]string{"s.txt": "s\n"})
+	super := t.TempDir()
+	repo(t, super, map[string]string{"a.txt": "a\n"})
+	git(t, super, "submodule", "add", "-q", sub, "sub")
+	git(t, super, "commit", "-qm", "submodule")
+	base := git(t, super, "rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(sub, "s.txt"), []byte("s2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(t, sub, "commit", "-qam", "next")
+	next := git(t, sub, "rev-parse", "HEAD")
+
+	link := FileChange{Path: "sub", Gitlink: true, Old: []byte(old), New: []byte(next)}
+	changes := []FileChange{{Path: "a.txt", Mode: 0o644, Old: []byte("a\n"), New: []byte("b\n")}, link}
+	for _, files := range [][]string{nil, {"*.txt"}} {
+		ups := []dep.Update{{Tasks: dep.Tasks{Commands: []string{"echo gen > gen.txt"}, Files: files}}}
+		got, err := BuildWithTasks(t.Context(), super, base, ups, changes, TaskAllowlist{"*"})
+		if err != nil {
+			t.Fatalf("files %v: %v", files, err)
+		}
+		i := slices.IndexFunc(got, func(c FileChange) bool { return c.Path == "sub" })
+		if i < 0 {
+			t.Fatalf("files %v: no gitlink change in %+v", files, got)
+		}
+		if g := got[i]; !g.Gitlink || string(g.Old) != old || string(g.New) != next {
+			t.Errorf("files %v: gitlink = %+v, want %+v", files, g, link)
+		}
+		if !slices.IsSortedFunc(got, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) }) {
+			t.Errorf("files %v: unsorted %+v", files, got)
+		}
+		if !slices.ContainsFunc(got, func(c FileChange) bool { return c.Path == "gen.txt" && string(c.New) == "gen\n" }) ||
+			!slices.ContainsFunc(got, func(c FileChange) bool { return c.Path == "a.txt" && string(c.New) == "b\n" }) {
+			t.Errorf("files %v: changes = %+v", files, got)
+		}
+	}
+}
+
 // Update-mode commands run once per update, in the group's order and with DEPS_* variables,
 // each seeing the previous runs' output; branch-mode commands run once, after them. A failing
 // update-mode run names its dep.
