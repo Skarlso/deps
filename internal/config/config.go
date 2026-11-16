@@ -634,8 +634,9 @@ type Rule struct {
 	Datasources []string `yaml:"datasources" jsonschema_description:"Only match deps looked up with these datasources, or custom.<name> of customDatasources; Renovate names (golang-version, github-tags, github-release-attachments, node, bitbucket-tags, azure-tags, bitbucket-server-tags, github-digest) match their deps datasource."`
 	// BaseBranches matches the base branch of the run (Renovate's matchBaseBranches).
 	BaseBranches []string `yaml:"baseBranches" jsonschema_description:"Only match deps on these base branches of run (baseBranches, --base, else the default branch), explain --base and preview --base: names or RE2 regexes '/<RE2>/' (flag i allowed); an entry starting with '!' excludes the branches it matches, and a list of only exclusions matches every other branch. plan, apply, and explain and preview without a base branch have none, so no rule with baseBranches matches there."`
-	// CurrentVersion and CurrentAge match the dep's current version (Renovate's
-	// matchCurrentVersion and matchCurrentAge).
+	// CurrentValue, CurrentVersion and CurrentAge match the dep's current state (Renovate's
+	// matchCurrentValue, matchCurrentVersion and matchCurrentAge).
+	CurrentValue   string   `yaml:"currentValue" jsonschema_description:"Only match deps whose version as written in the file matches this regex, Renovate's regex form '/<RE2>/' ('!/<RE2>/' excludes matches, flag i allowed): the range for deps that have one (npm '^4.17.0', cargo '>=1.2, <2', terraform '~> 5.0'), else the version itself. This is Renovate's matchCurrentValue, so '/^\\^/' matches caret ranges; currentVersion matches the resolved (locked) version instead."`
 	CurrentVersion string   `yaml:"currentVersion" jsonschema_description:"Only match deps whose current version (the locked one when a lockfile has it) satisfies this Masterminds semver constraint (e.g. '< 2', converted with the dep's versioning scheme), or matches the regex form '/<RE2>/' as written ('!/<RE2>/' excludes matches; flag i allowed). Cannot be combined with versioning."`
 	CurrentAge     string   `yaml:"currentAge" jsonschema_description:"Only match deps whose current version was released this long ago: an operator <, <=, > or >= and an age, e.g. '> 1 year' or '< 30 days' (units of minimumReleaseAge, where a month is 30 days and a year 365). The release time is looked up only for deps the other selectors of the rule match, from datasources with release times; an unknown time does not match. Cannot be combined with versioning or extractVersion."`
 	UpdateTypes    []string `yaml:"updateTypes" jsonschema_description:"Only match candidate updates of these types: the rule applies once the type of an update is known (e.g. group minor and patch updates, ignore majors). Cannot set pin."`
@@ -672,6 +673,7 @@ type Rule struct {
 	comment            string          // the comment above it (Comment)
 	allow              *Allowed
 	allowedUpdateTypes map[dep.UpdateType]bool // set of AllowedUpdateTypes; nil = not set
+	currentValue       *Allowed                // parsed CurrentValue; nil = not set
 	currentVersion     *Allowed                // parsed CurrentVersion; nil = not set
 	currentAge         *ageRange               // parsed CurrentAge; nil = not set
 	names, paths       *pattern.List           // compiled Names and Paths
@@ -1312,6 +1314,17 @@ func (c *Config) validateRule(i int, add addFunc) {
 		}
 	}
 	r.baseBranches = parseBranchPatterns(f+".baseBranches", r.BaseBranches, true, false, add)
+	r.currentValue = nil
+	if r.CurrentValue != "" {
+		switch a, err := ParseAllowed(r.CurrentValue); {
+		case err != nil:
+			add(f+".currentValue", "%v", err)
+		case a.re == nil:
+			add(f+".currentValue", "invalid regex %q: want /<RE2>/ or !/<RE2>/: the version is matched as written, not as a version number", r.CurrentValue)
+		default:
+			r.currentValue = a
+		}
+	}
 	r.currentVersion = nil
 	if r.CurrentVersion != "" {
 		if a, err := ParseAllowed(r.CurrentVersion); err != nil {

@@ -814,7 +814,7 @@ rules:
 
 A rule has two groups of fields:
 
-- **Match** fields select what the rule applies to: `managers`, `names`, `depTypes`, `paths`, `datasources`, `baseBranches`, `currentVersion`, `currentAge` and `updateTypes`. A rule **matches** a dep (or, with `updateTypes`, a candidate update of it) when every match field it sets matches; a list matches when any of its entries does. A rule without match fields matches every dep.
+- **Match** fields select what the rule applies to: `managers`, `names`, `depTypes`, `paths`, `datasources`, `baseBranches`, `currentValue`, `currentVersion`, `currentAge` and `updateTypes`. A rule **matches** a dep (or, with `updateTypes`, a candidate update of it) when every match field it sets matches; a list matches when any of its entries does. A rule without match fields matches every dep.
 - **Apply** fields override the policy of what the rule matches: every other field (`ignore`, `pin`, `allow`, `allowedUpdateTypes`, `rangeStrategy`, `versioning`, `separate`, `group`, `commitType`, `commitScope`, `schedule`, `dashboardApproval`, `minimumReleaseAge` and the `automerge*` fields). Every apply field a matching rule sets **overrides** the value from earlier rules (field-wise); `allowedUpdateTypes` replaces the earlier list, it is not merged.
 
 **Warnings.** `plan`, `apply`, `run` and `explain` warn on stderr (`warn    <path>: <field>: <msg>`) about rules that cannot have an effect: a rule without apply fields (or without any field), a `depTypes` entry no listed manager produces, a `datasources` entry no listed manager uses, and `depTypes` and `datasources` no dep has together (`managers: [gomod], depTypes: [devDependencies]` matches nothing: `devDependencies` are npm's). After resolving, `plan`, `apply` and `run` also warn about every rule of the repository's own config that matched none of its dependencies, e.g. one for a manager the repository does not use or a misspelled name glob: `warn    rule .deps.yaml:12 matched no dependency (managers=[npm] names=[react])`, with `--renovate` `warn    rule renovate.json packageRules[3] matched no dependency (…)`. Rules of extended configs and Renovate presets, and those deps adds for Renovate's defaults, are written for many repositories; they are only counted, in an `info` log record.
@@ -860,6 +860,20 @@ Renovate's `matchBaseBranches`. The base branch is the one `deps run` resolves: 
 ## Rule.depTypes
 
 [managers.md](managers.md) lists the dep types of each manager.
+
+## Rule.currentValue
+
+Renovate's `matchCurrentValue`: a regex against the version **as written in the file**, which is the range for a dep that has one (npm `^4.17.0`, cargo `>=1.2, <2`, terraform `~> 5.0`), else the version itself. The locked version is never used here, so `'/^\^/'` selects caret ranges and `'!/^\^/'` everything else, as in Renovate.
+
+- The value is Renovate's regex form: `/<RE2>/`, `/<RE2>/i`, or `!/<RE2>/` to exclude matches. A constraint is a config error (`rules[i].currentValue: invalid regex "< 2": want /<RE2>/ or !/<RE2>/: …`): a range is no version number. Match the resolved version with [`currentVersion`](#rulescurrentversion) instead.
+- It takes no [`versioning`](#rulesversioning): the text is matched as written, so the two can share a rule.
+
+```yaml
+rules:
+  - managers: [npm]                # leave caret ranges alone
+    currentValue: '/^\^/'
+    ignore: true
+```
 
 ## Rule.currentVersion
 

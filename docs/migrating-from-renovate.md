@@ -31,7 +31,7 @@ What it reports while translating:
 
 `migrate` prints both and writes them as the file's head comment; `--renovate` logs them.
 
-The translation keeps **Renovate's** defaults, not deps': the `renovate/` branch prefix (hence the [takeover](#branch-prefix-takeover)), `prConcurrentLimit: 10`, `prHourlyLimit: 2`, Renovate's `ignorePaths`, and Renovate's schedules evaluated as time windows at run time. Matchers become `rules[]` entries one to one — `matchManagers`/`matchCategories` to `managers`, `matchCurrentValue` to `currentVersion`, `matchFileNames` to `paths`, `groupName` to `group`, with repeated settings lifted into [`groups`](reference/configuration.md#groups) — and `commitMessage*`, `prTitle`, `prHeader` and `prFooter` are converted to Go templates. Every option and the key it becomes: [Renovate options](reference/renovate-options.md).
+The translation keeps **Renovate's** defaults, not deps': the `renovate/` branch prefix (hence the [takeover](#branch-prefix-takeover)), `prConcurrentLimit: 10`, `prHourlyLimit: 2`, Renovate's `ignorePaths`, and Renovate's schedules evaluated as time windows at run time. Matchers become `rules[]` entries one to one — `matchManagers`/`matchCategories` to `managers`, `matchCurrentValue` to `currentValue`, `matchFileNames` to `paths`, `groupName` to `group`, with repeated settings lifted into [`groups`](reference/configuration.md#groups) — and `commitMessage*`, `prTitle`, `prHeader` and `prFooter` are converted to Go templates. Every option and the key it becomes: [Renovate options](reference/renovate-options.md).
 
 ## With an AI agent
 

@@ -144,7 +144,7 @@ func regexEntry(p string) string {
 
 func prefixEntry(p string) string { return "/^" + regexp.QuoteMeta(p) + "/" }
 
-// currentValue converts a matchCurrentValue pattern into the currentVersion regex form.
+// currentValue converts a matchCurrentValue pattern into the currentValue regex form.
 // Renovate's regexes (/re/, /re/i, !/re/) carry over; another value is a case-insensitive
 // minimatch glob, which deps can express only when it is an exact string (a leading ! negates
 // it).
@@ -231,15 +231,9 @@ func (t *translator) rule(origin string, r map[string]any) {
 	t.n.builtin = builtinOrigin(origin) || (isBlock(origin) && t.builtinOnly(origin))
 	defer func() { t.n.builtin = false }()
 	var pkg, dep, paths, depTypes, datasources, updateTypes, managers, cats, bases []string
-	var current omap // currentVersion, currentAge
+	var current omap // currentValue, currentVersion, currentAge
 	hasManagers, hasCats := false, false
 	keys := slices.Sorted(mapKeys(r))
-	if _, ok := r["matchCurrentVersion"]; ok {
-		if _, ok := r["matchCurrentValue"]; ok {
-			t.n.warn(origin, "matchCurrentVersion and matchCurrentValue together cannot be expressed (one currentVersion); rule dropped")
-			return
-		}
-	}
 	list := func(k string) ([]string, bool) {
 		l, ok := strs(r[k])
 		if !ok {
@@ -353,7 +347,7 @@ func (t *translator) rule(origin string, r map[string]any) {
 				t.n.warn(origin, "matchCurrentValue %q: globs have no deps equivalent; rule dropped", v)
 				return
 			}
-			current.set("currentVersion", cv)
+			current.set("currentValue", cv)
 		case "matchManagers":
 			hasManagers, managers = true, l
 		case "matchCategories":
@@ -402,8 +396,12 @@ func (t *translator) rule(origin string, r map[string]any) {
 			}
 		}
 	}
-	// deps compares currentVersion and currentAge under the versioning other rules decide.
+	// deps compares currentVersion and currentAge under the versioning other rules decide;
+	// currentValue matches the value as written, so it takes no scheme.
 	for _, c := range current {
+		if c.k == "currentValue" {
+			continue
+		}
 		ks := []string{"versioning"}
 		if c.k == "currentAge" {
 			ks = append(ks, "extractVersion", "registryUrls")
@@ -441,7 +439,7 @@ func (t *translator) rule(origin string, r map[string]any) {
 				b.set(m.k, m.l)
 			}
 		}
-		for _, k := range []string{"currentVersion", "currentAge"} {
+		for _, k := range []string{"currentValue", "currentVersion", "currentAge"} {
 			for _, f := range current {
 				if f.k == k {
 					b.set(k, f.v)

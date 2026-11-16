@@ -293,7 +293,10 @@ func (c *Config) matchesDep(r *Rule, d dep.Dep, vc *vcache) bool {
 		len(r.DepTypes) > 0 && !slices.Contains(r.DepTypes, d.DepType),
 		len(r.Paths) > 0 && !r.paths.Match(d.File),
 		len(r.Datasources) > 0 && !slices.ContainsFunc(r.Datasources, func(ds string) bool { return CanonicalDatasource(ds) == d.Datasource }),
-		len(r.BaseBranches) > 0 && (c.baseBranch == "" || !matchBranches(r.baseBranches, c.baseBranch)):
+		len(r.BaseBranches) > 0 && (c.baseBranch == "" || !matchBranches(r.baseBranches, c.baseBranch)),
+		// Renovate's matchCurrentValue (lib/util/package-rules/current-value.ts) matches the
+		// value as written, which is the range when the dep has one, never the locked version.
+		r.currentValue != nil && !r.currentValue.Check(cmp.Or(d.Range, d.Version), nil):
 		return false
 	}
 	return r.currentVersion == nil || c.currentMatches(r.currentVersion, d, vc)

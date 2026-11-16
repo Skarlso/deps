@@ -113,6 +113,39 @@ func TestRuleCurrentVersion(t *testing.T) {
 	}
 }
 
+// Renovate's matchCurrentValue matches the value as written (lib/util/package-rules/
+// current-value.ts), which for a dep with a range is the range, never the locked version.
+func TestRuleCurrentValue(t *testing.T) {
+	lodash := dep.Dep{Name: "lodash", Manager: "npm", Versioning: "semver", Range: "^4.17.0", Version: "4.17.0", Locked: "4.17.21"}
+	pinned := dep.Dep{Name: "lodash", Manager: "npm", Versioning: "semver", Version: "4.17.21", Locked: "4.17.21"}
+	for _, tc := range []struct {
+		name  string
+		cfg   string
+		d     dep.Dep
+		match bool
+	}{
+		{"caret range", "rules: [{currentValue: '/^\\^/', group: g}]", lodash, true},
+		{"caret range not pinned", "rules: [{currentValue: '/^\\^/', group: g}]", pinned, false},
+		{"negated caret range", "rules: [{currentValue: '!/^\\^/', group: g}]", lodash, false},
+		{"the range, not the locked version", "rules: [{currentValue: '/^4\\.17\\.21$/', group: g}]", lodash, false},
+		{"the version without a range", "rules: [{currentValue: '/^4\\.17\\.21$/', group: g}]", pinned, true},
+		{"the range as written, not its bare version", "rules: [{currentValue: '/^4\\.17\\.0$/', group: g}]", lodash, false},
+		{"flag i", "rules: [{currentValue: '/^V1/i', group: g}]", dep.Dep{Versioning: "tag", Version: "v1.2.3"}, true},
+		// currentValue needs no versioning, so a rule may set both.
+		{"next to versioning", "rules: [{currentValue: '/^\\^/', versioning: loose, group: g}]", lodash, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := load(t, ".deps.yaml", tc.cfg+"\n")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := c.Policy(tc.d).Group == "g"; got != tc.match {
+				t.Errorf("match = %v, want %v", got, tc.match)
+			}
+		})
+	}
+}
+
 func TestRuleCurrentAge(t *testing.T) {
 	c, err := load(t, ".deps.yaml", `rules:
   - currentAge: '> 1 year'
@@ -217,6 +250,8 @@ func TestRuleMatcherErrors(t *testing.T) {
 		{"rules: [{names: ['!']}]\n", `rules[0].names[0]: invalid glob "!": missing pattern after !`},
 		{"rules: [{names: [a, '![']}]\n", `rules[0].names[1]: invalid glob "!["`},
 		{"rules: [{paths: ['!']}]\n", `rules[0].paths[0]: invalid glob "!": missing pattern after !`},
+		{"rules: [{currentValue: '< 2'}]\n", `rules[0].currentValue: invalid regex "< 2": want /<RE2>/ or !/<RE2>/`},
+		{"rules: [{currentValue: '/(/'}]\n", `rules[0].currentValue: invalid regex "/(/"`},
 		{"rules: [{currentVersion: '>>1'}]\n", `rules[0].currentVersion: invalid constraint ">>1"`},
 		{"rules: [{currentVersion: '!/(/'}]\n", `rules[0].currentVersion: invalid regex "!/(/"`},
 		{"rules: [{currentVersion: '< 2', versioning: loose}]\n", "rules[0].currentVersion: cannot be combined with versioning"},

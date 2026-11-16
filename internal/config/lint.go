@@ -16,7 +16,7 @@ type Warning struct{ Field, Msg string }
 
 // RuleMatchFields are the keys of the rule fields that select deps and updates; every other
 // rule key is an apply field (RuleApplyFields).
-var RuleMatchFields = []string{"managers", "names", "depTypes", "paths", "datasources", "baseBranches", "currentVersion", "currentAge", "updateTypes"}
+var RuleMatchFields = []string{"managers", "names", "depTypes", "paths", "datasources", "baseBranches", "currentValue", "currentVersion", "currentAge", "updateTypes"}
 
 // RuleApplyFields are the keys of the rule fields that override the policy, in declaration
 // order.

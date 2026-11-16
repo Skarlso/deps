@@ -490,56 +490,59 @@ func TestLoadRules(t *testing.T) {
     automerge: true` + defaultExclusions,
 		},
 		{
-			name: "matchCurrentValue regexes and exact strings are currentVersion",
+			name: "matchCurrentValue regexes and exact strings are currentValue",
 			src: `{packageRules: [{matchCurrentValue: '/^1/', matchPackageNames: ['a'], enabled: false},
 				{matchCurrentValue: '!/-rc/i', matchPackageNames: ['b'], enabled: false},
 				{matchCurrentValue: 'v1.2.3', matchPackageNames: ['c'], enabled: false},
 				{matchCurrentValue: '!latest', matchPackageNames: ['d'], enabled: false}]}`,
 			rules: `  - # packageRules[0]
     names: [a]
-    currentVersion: /^1/
+    currentValue: /^1/
     ignore: true
   - # packageRules[1]
     names: [b]
-    currentVersion: '!/-rc/i'
+    currentValue: '!/-rc/i'
     ignore: true
   - # packageRules[2]
     names: [c]
-    currentVersion: /^v1\.2\.3$/i
+    currentValue: /^v1\.2\.3$/i
     ignore: true
   - # packageRules[3]
     names: [d]
-    currentVersion: '!/^latest$/i'
+    currentValue: '!/^latest$/i'
     ignore: true` + defaultExclusions,
 		},
 		{
-			name: "matchCurrentValue globs, matchCurrentValue with matchCurrentVersion and invalid regexes drop the rule",
+			name: "matchCurrentValue globs and invalid regexes drop the rule, matchCurrentVersion joins it",
 			src: `{packageRules: [{matchCurrentValue: '1.*', matchPackageNames: ['a'], enabled: false},
 				{matchCurrentValue: '/^1/', matchCurrentVersion: '< 2', matchPackageNames: ['b'], enabled: false},
 				{matchCurrentValue: '/(?=x)/', matchPackageNames: ['c'], enabled: false},
 				{matchCurrentValue: 1, matchPackageNames: ['d'], enabled: false}]}`,
-			rules: strings.TrimPrefix(defaultExclusions, "\n"),
+			rules: `  - # packageRules[1]
+    names: [b]
+    currentValue: /^1/
+    currentVersion: < 2
+    ignore: true` + defaultExclusions,
 			notes: []string{
 				`warn packageRules[0]: matchCurrentValue "1.*": globs have no deps equivalent; rule dropped`,
-				"warn packageRules[1]: matchCurrentVersion and matchCurrentValue together cannot be expressed (one currentVersion); rule dropped",
 				"warn packageRules[3]: matchCurrentValue must be a string; rule dropped",
 			},
 		},
 		{
-			name: "versioning is dropped next to currentVersion and currentAge",
+			name: "versioning is dropped next to currentVersion and currentAge, but not next to currentValue",
 			src: `{packageRules: [{matchCurrentValue: '/^v1/', matchPackageNames: ['a'], versioning: 'loose', groupName: 'a'},
 				{matchCurrentAge: '> 1 year', matchPackageNames: ['b'], extractVersion: '^v(?<version>.+)$', enabled: false},
 				{matchCurrentVersion: '< 2', matchPackageNames: ['c'], versioning: 'loose'}]}`,
 			rules: `  - # packageRules[0]
     names: [a]
-    currentVersion: /^v1/
+    currentValue: /^v1/
+    versioning: loose
     group: a
   - # packageRules[1]
     names: [b]
     currentAge: '> 1 year'
     ignore: true` + defaultExclusions,
 			notes: []string{
-				"warn packageRules[0].versioning: deps cannot combine versioning with currentVersion; dropped",
 				"warn packageRules[1].extractVersion: deps cannot combine extractVersion with currentAge; dropped",
 				"warn packageRules[2].versioning: deps cannot combine versioning with currentVersion; dropped",
 				"info packageRules[2]: no deps effect left; rule dropped",

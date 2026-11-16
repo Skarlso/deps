@@ -12,7 +12,7 @@ Each of these is reported when it occurs; the rest of the config still applies.
 | `replacements:<name>` presets deps' built-in list lacks (`spectre-cli-to-spectre-console-cli`, nuget; `material-ui-to-mui`, `messageFormat-to-scoped`, defined in Renovate's code), `replacementNameTemplate` other than `{{{replace '<prefix>' '<new prefix>' packageName}}}`, `replacementVersionTemplate` | skipped / the field is dropped (warning) |
 | built-in `workarounds:*`, `helpers:*` (except `pinGitHubActionDigests`), `security:openssf-scorecard` | skipped (info) |
 | PR-body presets deps covers on its own: `helpers:*DigestChangelogs` (deps links the commit-to-commit diff of every digest update, images via their `org.opencontainers.image.revision` label), `helpers:goXPackages*` and `helpers:renovateChangelog` (deps shows those repositories' release notes), `mergeConfidence:*` (a Renovate service) | skipped silently |
-| `matchCurrentValue` globs (`1.*`), `matchCurrentValue` together with `matchCurrentVersion`, `matchJsonata`, `matchSourceUrls`, `matchRepositories`, `matchBaseBranches` with only globs, other unknown `match*`/`exclude*` keys | the rule is dropped |
+| `matchCurrentValue` globs (`1.*`), `matchJsonata`, `matchSourceUrls`, `matchRepositories`, `matchBaseBranches` with only globs, other unknown `match*`/`exclude*` keys | the rule is dropped |
 | glob entries of `matchBaseBranches` and `baseBranchPatterns` | the entry is dropped (warning) |
 | `$default` in `matchBaseBranches` | the entry is dropped (warning): Renovate unfolds `$default` only in `baseBranchPatterns`, so such an entry matches no branch there either; a rule left without any is dropped |
 | `matchPackageNames` together with `matchDepNames` in one rule | the rule is dropped (deps has one `names` list) |
@@ -20,7 +20,7 @@ Each of these is reported when it occurs; the rest of the config still applies.
 | `prCreation: approval` without `dashboard.enabled: true` | dropped (warning), as approval happens on the dashboard |
 | update types `lockFileMaintenance`, `rollback`, `bump`, `lockfileUpdate` in `matchUpdateTypes` | dropped; a rule left without update types is dropped |
 | `pin`, `rangeStrategy`, `versioning`, `extractVersion`, `replacementName`/`replacementVersion` in a rule with `matchUpdateTypes` | the field is dropped (deps decides them before the update type is known) |
-| `versioning` in a rule with `matchCurrentVersion`/`matchCurrentValue`/`matchCurrentAge`, `extractVersion` with `matchCurrentAge` | the field is dropped (deps compares the current version under the versioning other rules decide) |
+| `versioning` in a rule with `matchCurrentVersion`/`matchCurrentAge`, `extractVersion` with `matchCurrentAge` | the field is dropped (deps compares the current version under the versioning other rules decide) |
 | `prHeader`/`prFooter` with Handlebars helpers, block expressions or fields other than those above | the field is dropped |
 | `postUpgradeTasks` commands with `{{templates}}`; `dataFileTemplate`, `installTools`, `workingDirTemplate` | the tasks are dropped (deps passes the update as `DEPS_*` variables); the other keys are ignored. Translated tasks run only with `--allow-tasks` |
 | `automergeType: branch`, `automergeStrategy: fast-forward`/`rebase-merge`, `platformAutomerge: false` | dropped; deps always automerges the PR through the platform |
