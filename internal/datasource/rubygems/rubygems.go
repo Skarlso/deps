@@ -42,12 +42,31 @@ type Source struct {
 	repos datasource.Memo[string, string] // by name
 }
 
-// gem is what a server lists for a gem: every version with a Ruby platform build once (the
-// other builds of it merged in) and, from the rubygems.org API, the earliest build time of
-// each version.
+// gem is what a server lists for a gem: rels holds every version with a Ruby platform build
+// (the other builds of it merged in), all every version whatever its builds (nil when every
+// version has a Ruby build), and, from the rubygems.org API, the earliest build time of each
+// version.
 type gem struct {
 	rels  []datasource.Release
+	all   []datasource.Release
 	times map[string]time.Time
+}
+
+// releases is what a dep at version current is offered: the versions with a Ruby build, the
+// only ones an MRI `gem install` takes. A gem with no Ruby build at all (sorbet-static ships
+// as `x86_64-linux`, `universal-darwin`, `java`, …) and a dep whose current version has none
+// get every version instead: the project installs platform builds of this gem, so dropping
+// them would leave the dep without any update.
+func (g *gem) releases(current string) []datasource.Release {
+	switch {
+	case g.all == nil:
+		return g.rels
+	case len(g.rels) == 0:
+		return g.all
+	case current != "" && !slices.ContainsFunc(g.rels, func(r datasource.Release) bool { return r.Version == current }):
+		return g.all
+	}
+	return g.rels
 }
 
 // New returns the rubygems datasource. sem bounds concurrent requests (nil = unbounded); getenv
@@ -61,16 +80,17 @@ func New(client *http.Client, sem chan struct{}, getenv func(string) string) *So
 	return s
 }
 
-// Releases lists every published version of d (yanked versions are not listed by either
-// API). d.Source holds the gem servers of the dep in lookup order, whitespace-separated ("" =
-// rubygems.org); the first one that has the gem answers. The result is shared and must not be
-// modified.
+// Releases lists the published versions of d an MRI build can install (yanked versions are
+// not listed by either API): the versions with a Ruby build, every version for a gem that
+// ships as platform builds only. d.Source holds the gem servers of the dep in lookup order,
+// whitespace-separated ("" = rubygems.org); the first one that has the gem answers. The
+// result is shared and must not be modified.
 func (s *Source) Releases(ctx context.Context, d dep.Dep, _ string) ([]datasource.Release, error) {
 	g, err := s.lookup(ctx, d)
 	if err != nil {
 		return nil, err
 	}
-	return g.rels, nil
+	return g.releases(d.Version), nil
 }
 
 // ReleaseTime implements datasource.Timer with the earliest build time of version on
@@ -191,21 +211,39 @@ func rubyPlatform(platform string) bool {
 	return platform == "" || platform == "ruby"
 }
 
+// add records a build of version v: in g.all always, in g.rels when it is a Ruby build.
+// listed and seen hold the versions already in g.rels and g.all.
+func (g *gem) add(v string, ruby bool, listed, seen map[string]bool) {
+	if !seen[v] {
+		seen[v] = true
+		g.all = append(g.all, datasource.Release{Version: v})
+	}
+	if ruby && !listed[v] {
+		listed[v] = true
+		g.rels = append(g.rels, datasource.Release{Version: v})
+	}
+}
+
+// done drops g.all when it lists the same versions as g.rels, the usual gem.
+func (g *gem) done() *gem {
+	if len(g.all) == len(g.rels) {
+		g.all = nil
+	}
+	return g
+}
+
 // versions reads `<base>/api/v1/versions/<name>.json`: one entry per platform build, newest
-// first. Only versions with a Ruby build are listed; the release time of a version is the
-// earliest of all its builds.
+// first. The versions with a Ruby build are listed, the others kept for a gem that has no
+// Ruby build (gem.releases); the release time of a version is the earliest of all its builds.
 func (s *Source) versions(ctx context.Context, base, name string) (*gem, error) {
 	g := &gem{times: map[string]time.Time{}}
-	listed := map[string]bool{}
+	listed, seen := map[string]bool{}, map[string]bool{}
 	err := s.get(ctx, base+"/api/v1/versions/"+url.PathEscape(name)+".json", func(r io.Reader) error {
 		return datasource.DecodeArray(r, func(v version) {
 			if v.Number == "" {
 				return
 			}
-			if rubyPlatform(v.Platform) && !listed[v.Number] {
-				listed[v.Number] = true
-				g.rels = append(g.rels, datasource.Release{Version: v.Number})
-			}
+			g.add(v.Number, rubyPlatform(v.Platform), listed, seen)
 			if t, err := time.Parse(time.RFC3339, v.CreatedAt); err == nil {
 				if old, seen := g.times[v.Number]; !seen || old.IsZero() || t.Before(old) {
 					g.times[v.Number] = t
@@ -216,18 +254,19 @@ func (s *Source) versions(ctx context.Context, base, name string) (*gem, error) 
 	if err != nil {
 		return nil, err
 	}
-	return g, nil
+	return g.done(), nil
 }
 
 // compact reads the compact index `<base>/info/<name>`: after the `---` line, one line per
-// build, `<version>[-<platform>] <dependencies>|<requirements>`. Only versions with a Ruby
-// build (a line without a platform suffix) are listed.
+// build, `<version>[-<platform>] <dependencies>|<requirements>`. The versions with a Ruby
+// build (a line without a platform suffix) are listed, the others kept for a gem that has no
+// Ruby build (gem.releases).
 func (s *Source) compact(ctx context.Context, base, name string) (*gem, error) {
 	g := &gem{}
 	err := s.get(ctx, base+"/info/"+url.PathEscape(name), func(r io.Reader) error {
 		sc := bufio.NewScanner(r)
 		sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
-		seen := map[string]bool{}
+		listed, seen := map[string]bool{}, map[string]bool{}
 		body := false
 		for sc.Scan() {
 			line := sc.Text()
@@ -237,9 +276,8 @@ func (s *Source) compact(ctx context.Context, base, name string) (*gem, error) {
 			}
 			v, _, _ := strings.Cut(line, " ")
 			v, platform, _ := strings.Cut(v, "-") // the platform; gem versions have no "-"
-			if v != "" && rubyPlatform(platform) && !seen[v] {
-				seen[v] = true
-				g.rels = append(g.rels, datasource.Release{Version: v})
+			if v != "" {
+				g.add(v, rubyPlatform(platform), listed, seen)
 			}
 		}
 		if err := sc.Err(); err != nil {
@@ -253,7 +291,7 @@ func (s *Source) compact(ctx context.Context, base, name string) (*gem, error) {
 	if err != nil {
 		return nil, err
 	}
-	return g, nil
+	return g.done(), nil
 }
 
 // get GETs target and passes the body to read. A 404 is errNotFound.

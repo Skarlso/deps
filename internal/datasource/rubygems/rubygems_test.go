@@ -67,6 +67,16 @@ func serve(t *testing.T, hits *atomic.Int32) *httptest.Server {
 				`{"number":"1.0.0","platform":"ruby","created_at":"2024-01-01T00:00:01.000Z"}]`)
 		case "/compact/info/jruby_only":
 			fmt.Fprint(w, "---\n1.0.0 |checksum:aa\n2.0.0-java |checksum:bb\n")
+		// sorbet_static ships as platform builds only, like sorbet-static on rubygems.org:
+		// of its versions only a 2019 prealpha has a Ruby build.
+		case "/api/v1/versions/sorbet_static.json":
+			fmt.Fprint(w, `[{"number":"0.5.12","platform":"x86_64-linux","created_at":"2025-03-01T00:00:00.000Z"},`+
+				`{"number":"0.5.12","platform":"universal-darwin","created_at":"2025-03-01T00:00:00.000Z"},`+
+				`{"number":"0.5.11","platform":"x86_64-linux","created_at":"2025-01-01T00:00:00.000Z"},`+
+				`{"number":"0.0.1.pre.prealpha","platform":"ruby","created_at":"2019-05-18T00:00:00.000Z"}]`)
+		case "/compact/info/sorbet_static":
+			fmt.Fprint(w, "---\n0.0.1.pre.prealpha |checksum:aa\n0.5.11-x86_64-linux |checksum:bb\n"+
+				"0.5.12-x86_64-linux |checksum:cc\n0.5.12-universal-darwin |checksum:dd\n")
 		default:
 			http.NotFound(w, r)
 		}
@@ -119,7 +129,8 @@ func TestReleasesRubygemsOrg(t *testing.T) {
 }
 
 // TestReleasesPlatformOnly pins that a version published only for a non-Ruby platform (a
-// JRuby-only release) is not offered to an MRI dep: `gem install` would fail on it.
+// JRuby-only release) is not offered to an MRI dep: `gem install` would fail on it. A dep
+// already on a JRuby build is offered it.
 func TestReleasesPlatformOnly(t *testing.T) {
 	var hits atomic.Int32
 	srv := serve(t, &hits)
@@ -129,6 +140,37 @@ func TestReleasesPlatformOnly(t *testing.T) {
 		if err != nil || !slices.Equal(versionsOf(rels), []string{"1.0.0"}) {
 			t.Errorf("Releases(%q) = %v, %v, want [1.0.0]", src, versionsOf(rels), err)
 		}
+		rels, err = s.Releases(t.Context(), dep.Dep{Name: "jruby_only", Source: src, Version: "2.0.0"}, "")
+		if err != nil || len(rels) != 2 {
+			t.Errorf("Releases(%q, on 2.0.0) = %v, %v, want both versions", src, versionsOf(rels), err)
+		}
+	}
+}
+
+// A gem published as platform builds only (sorbet-static: x86_64-linux, universal-darwin,
+// java, …) must still get updates: dropping its versions would leave the dep on whatever
+// the lockfile holds, with no update ever proposed.
+func TestReleasesPlatformOnlyGem(t *testing.T) {
+	var hits atomic.Int32
+	srv := serve(t, &hits)
+	s := newSource(srv, nil)
+	for _, c := range []struct {
+		src  string
+		want []string
+	}{
+		{"", []string{"0.5.12", "0.5.11", "0.0.1.pre.prealpha"}},                   // versions API order
+		{srv.URL + "/compact", []string{"0.0.1.pre.prealpha", "0.5.11", "0.5.12"}}, // compact index order
+	} {
+		d := dep.Dep{Name: "sorbet_static", Source: c.src, Version: "0.5.11"}
+		rels, err := s.Releases(t.Context(), d, "")
+		if err != nil || !slices.Equal(versionsOf(rels), c.want) {
+			t.Errorf("Releases(%q) = %v, %v, want %v", c.src, versionsOf(rels), err, c.want)
+		}
+	}
+	// The one version with a Ruby build is the whole list of a dep that uses it.
+	rels, err := s.Releases(t.Context(), dep.Dep{Name: "sorbet_static", Version: "0.0.1.pre.prealpha"}, "")
+	if err != nil || !slices.Equal(versionsOf(rels), []string{"0.0.1.pre.prealpha"}) {
+		t.Errorf("Releases(on the Ruby build) = %v, %v", versionsOf(rels), err)
 	}
 }
 
