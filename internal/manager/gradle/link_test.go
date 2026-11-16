@@ -360,12 +360,32 @@ func TestProperties(t *testing.T) {
 			t.Errorf("%s: span %v", k, v.span)
 		}
 	}
-	want := map[string]string{"a": "1", "b": "2", "c": "3", "d": "4", "g": "5", "crlf": "6", "dup": "8", "last": "10"}
+	want := map[string]string{"a": "1", "b": "2", "c": "3", "d": "4", "g": "5", "crlf": "6", "dup": "9", "last": "10"}
 	if !maps.Equal(got, want) {
 		t.Errorf("got %v", got)
 	}
 	if d := properties([]byte(src))["g"]; d.line != 8 {
 		t.Errorf("line of g = %d", d.line)
+	}
+	if d := properties([]byte(src))["dup"]; d.line != 17 {
+		t.Errorf("line of dup = %d", d.line)
+	}
+}
+
+// Gradle reads gradle.properties with java.util.Properties.load, where the last definition
+// of a key wins; the update has to land on that line, not on the dead first one.
+func TestPropertiesDuplicateKeyLastWins(t *testing.T) {
+	files := map[string]string{
+		"settings.gradle.kts": "rootProject.name = \"x\"\n",
+		"gradle.properties":   "kotlinVersion=1.8.0\nspotless=6.0\nkotlinVersion=1.9.0\n",
+		"build.gradle.kts": "plugins {\n" +
+			"  kotlin(\"jvm\") version \"$kotlinVersion\"\n" +
+			"}\n",
+	}
+	deps := runBuild(t, files, false)
+	d := get(t, deps, "build.gradle.kts", "org.jetbrains.kotlin.jvm")
+	if got, want := linkedOf(d), (linked{"gradle.properties", "1.9.0", "kotlinVersion", "", 3}); got != want {
+		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
 

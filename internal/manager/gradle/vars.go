@@ -324,7 +324,8 @@ func (s *source) mapEntries(out []assignment, name string, open, depth int, kotl
 }
 
 // properties parses a gradle.properties file: `key=value`, `key: value` and `key value`;
-// entries with escapes or line continuations are left out.
+// entries with escapes or line continuations are left out. Like java.util.Properties.load,
+// the last occurrence of a key wins.
 func properties(src []byte) defs {
 	out := defs{}
 	off, line := 0, 0
@@ -372,7 +373,7 @@ func properties(src []byte) defs {
 		if strings.Contains(key, `\`) || !literalDef(v) {
 			continue
 		}
-		out.add(def{name: key, value: v, span: dep.Span{Start: start + k, End: start + k + len(v)}, line: line}, key)
+		out[key] = def{name: key, value: v, span: dep.Span{Start: start + k, End: start + k + len(v)}, line: line}
 	}
 	return out
 }
