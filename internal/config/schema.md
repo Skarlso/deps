@@ -480,7 +480,8 @@ registryAliases:
 ## Config.minimumReleaseAge
 
 - **Syntax:**
-  - `<n> <unit>`, where the unit is minutes, hours, days or weeks, written singular, plural or as the first letter, with the space optional: `28 days`, `1 day`, `3d`, `12h`, `90m`, `2w`;
+  - `<n> <unit>`, where the unit is milliseconds, seconds, minutes, hours, days, weeks, months (30 days) or years (365 days), written singular, plural, abbreviated (`ms`, `secs`, `mins`, `hrs`, `yrs`) or as the first letter, with the space optional: `28 days`, `1 day`, `3d`, `12h`, `90m`, `2w`, `1 month`, `2 years`. Units ignore case (`3 Days`), except that `M` means months and `m` minutes, as in Renovate; `<n>` may have decimals (`0.5 days`);
+  - several such parts, summed: `1 day 12 hours`;
   - `0`;
   - a Go duration: `1h30m`.
 
@@ -517,7 +518,7 @@ rules:
 
 A dependency whose newest release is older than this is listed under **Abandoned dependencies** on the [dashboard](#dashboard), and its update PRs say so under **Warnings** (Renovate's `abandonmentThreshold`).
 
-- **Syntax:** as for [`minimumReleaseAge`](#minimumreleaseage), plus months (30 days) and years (365 days): `1 year`, `18 months`, `2y`. Empty or `0` turns the check off (the default).
+- **Syntax:** as for [`minimumReleaseAge`](#minimumreleaseage): `1 year`, `18 months`, `2y`. Empty or `0` turns the check off (the default).
 - **Newest release:** the highest stable release the datasource lists. With npm, the package's `modified` time bounds every release, so a package not modified within the threshold is abandoned without another request (`no release since <date>`); otherwise the newest release's time is looked up, once per dep (`newest release <v> published <date>`; for npm that is the full packument, shared with `minimumReleaseAge` and the PR's age column). Datasources without release times, and unknown times, never flag a dep.
 - Only deps that are looked up are checked: ignored deps and deps without a valid version are not.
 - `rules[].abandonmentThreshold` overrides it per dep; `0` turns it off for matching deps.
@@ -870,7 +871,7 @@ Renovate's `matchCurrentVersion`. The current version is the locked one when a l
 
 ## Rule.currentAge
 
-Renovate's `matchCurrentAge`: `> 1 year` matches deps whose current version (the locked one when known) was released more than a year ago, `< 30 days` those released within the last 30 days. Operators are `<`, `<=`, `>` and `>=`; ages take the units of [`minimumReleaseAge`](#minimumreleaseage) plus `month`/`months` (30 days) and `year`/`years`/`y` (365 days).
+Renovate's `matchCurrentAge`: `> 1 year` matches deps whose current version (the locked one when known) was released more than a year ago, `< 30 days` those released within the last 30 days. Operators are `<`, `<=`, `>` and `>=`; ages take the units of [`minimumReleaseAge`](#minimumreleaseage), including `month`/`months` (30 days) and `year`/`years`/`y` (365 days).
 
 - The release time comes from the datasource (see the release times of each datasource in [managers.md](managers.md)). It is looked up once per dep and only when the other selectors of a currentAge rule (`updateTypes` aside) match it; other deps cost nothing.
 - An unknown time (a datasource without times, or a failed lookup) matches no currentAge rule. `deps explain` shows the lookup in its `age` line: `released <date>`, or `unknown (currentAge rules do not match)`.

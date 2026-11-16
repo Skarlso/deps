@@ -11,8 +11,6 @@ import (
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/dep"
 )
 
-const day = 24 * time.Hour
-
 func TestRuleNegatedGlobs(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

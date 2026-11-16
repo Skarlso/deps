@@ -1436,17 +1436,22 @@ func TestDashboardConfig(t *testing.T) {
 }
 
 func TestParseAge(t *testing.T) {
-	day := 24 * time.Hour
 	for in, want := range map[string]time.Duration{
 		"28 days": 28 * day, "1 day": day, "3d": 3 * day, "12h": 12 * time.Hour, "90m": 90 * time.Minute,
 		"2 weeks": 14 * day, "1w": 7 * day, "5 minutes": 5 * time.Minute, "3 hours": 3 * time.Hour, "1h30m": 90 * time.Minute,
 		"0": 0, "0 days": 0, "0s": 0,
+		// Renovate's own forms (lib/util/pretty-time.ts and the ms package).
+		"1 month": 30 * day, "3 months": 90 * day, "3 M": 90 * day, "2 years": 730 * day, "1y": 365 * day,
+		"36 hrs": 36 * time.Hour, "1 day 12 hours": 36 * time.Hour, "1 week 1 day": 8 * day,
+		"3 Days": 3 * day, "12 HOURS": 12 * time.Hour, "1.5 days": 36 * time.Hour, "0.5 days": 12 * time.Hour,
+		"30 seconds": 30 * time.Second, "500ms": 500 * time.Millisecond,
 	} {
 		if got, err := ParseAge(in); err != nil || got != want {
 			t.Errorf("ParseAge(%q) = %v, %v; want %v", in, got, err, want)
 		}
 	}
-	for _, in := range []string{"", "soon", "-3h", "3 months", "days", "1.5 days"} {
+	// "mo" is no ms unit, and a month needs a number before it.
+	for _, in := range []string{"", "soon", "-3h", "days", "3 mo", "month", "1 day x", "1 fortnight", "2024-01-01"} {
 		if _, err := ParseAge(in); err == nil {
 			t.Errorf("ParseAge(%q): no error", in)
 		}
