@@ -1775,7 +1775,7 @@ Must not be empty.
 
 ### `custom[].match`
 
-RE2 regexp with a (?P\<version>) or (?P\<currentValue>) group and optional name (or depName/packageName), datasource, digest and checksum groups; empty means annotation mode (or JSONata mode with jsonata).
+RE2 regexp with a (?P\<version>) or (?P\<currentValue>) group and optional name (or depName/packageName), datasource, digest and checksum groups; empty means annotation mode (or JSONata mode with jsonata). It is matched against the whole file, so ^ and $ anchor the file, not a line: write (?m) in front of the pattern to anchor them to lines.
 
 - **Type:** string
 

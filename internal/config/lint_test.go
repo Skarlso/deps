@@ -62,6 +62,41 @@ func TestLint(t *testing.T) {
 	}
 }
 
+func TestLintCustomMatch(t *testing.T) {
+	for _, tc := range []struct {
+		name, match string
+		want        []Warning
+	}{
+		{"whole-file anchors without (?m)", `'^  version: (?P<version>v\S+)$'`, []Warning{
+			{"custom[0].match", "is anchored to the start and the end of the file but cannot match a newline, so it matches nothing: write (?m) in front of it to anchor ^ and $ to lines"},
+		}},
+		{"\\A and \\z without a newline", `'\A(?P<version>v\S+)\z'`, []Warning{
+			{"custom[0].match", "is anchored to the start and the end of the file but cannot match a newline, so it matches nothing: write (?m) in front of it to anchor ^ and $ to lines"},
+		}},
+		{"multi-line mode", `'(?m)^  version: (?P<version>v\S+)$'`, nil},
+		{"unanchored", `'VERSION=(?P<version>v\S+)'`, nil},
+		{"leading anchor only", `'^VERSION=(?P<version>v\S+)'`, nil},
+		{"anchored across lines", `'^A=(?P<version>v\S+)\n(?:.*\n)*?B$'`, nil},
+		{"anchored with a dot-all wildcard", `'(?s)^A=(?P<version>v\S+).*$'`, nil},
+		{"anchored with a newline in a class", `'^A=(?P<version>v\S+)[\s]+B$'`, nil},
+		{"annotation mode", "", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := "custom:\n  - files: [versions.txt]\n    datasource: git-tags\n    name: example.com/a\n"
+			if tc.match != "" {
+				entry += "    match: " + tc.match + "\n"
+			}
+			c, err := load(t, ".deps.yaml", entry)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := c.Lint(); !slices.Equal(got, tc.want) {
+				t.Errorf("Lint() =\n%v\nwant\n%v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRuleFieldGroups(t *testing.T) {
 	if RuleApplyFields[0] != "ignore" || slices.Contains(RuleApplyFields, "managers") || !slices.Contains(RuleApplyFields, "automergeType") {
 		t.Errorf("RuleApplyFields = %v", RuleApplyFields)

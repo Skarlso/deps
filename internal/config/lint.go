@@ -6,6 +6,7 @@ import (
 	"iter"
 	"maps"
 	"reflect"
+	"regexp/syntax"
 	"slices"
 	"strings"
 )
@@ -71,15 +72,68 @@ func yamlKey(f reflect.StructField) string {
 // Lint reports the parts of a validated configuration that cannot have an effect, without
 // looking at the repository: rules that set no apply field, match fields no dep can satisfy
 // together (a dep type no listed manager produces, a datasource no listed manager or dep type
-// uses), and groups entries no policy group has (no rule sets the group, and no built-in group
-// rule applying has the name). Rules that match no dep of the repository are a run-time
-// finding (UnusedRules).
+// uses), groups entries no policy group has (no rule sets the group, and no built-in group
+// rule applying has the name), and custom entries whose match is anchored to the whole file
+// although it can only match one line. Rules that match no dep of the repository are a
+// run-time finding (UnusedRules).
 func (c *Config) Lint() []Warning {
 	ws := make([]Warning, 0, len(c.Rules))
 	for i := range c.Rules {
 		ws = append(ws, c.Rules[i].lint(fmt.Sprintf("rules[%d]", i))...)
 	}
-	return append(ws, c.lintGroups()...)
+	ws = append(ws, c.lintGroups()...)
+	return append(ws, c.lintCustom()...)
+}
+
+// lintCustom reports custom entries whose match anchors to the start and the end of the file
+// (^ and $ outside multi-line mode, \A and \z) but cannot match a newline: only a file whose
+// whole content is that one line, without the trailing newline, would match, so the entry
+// extracts nothing. Almost always (?m) is missing, which is what makes ^ and $ match at line
+// boundaries, as in Renovate's JavaScript regexes with the m flag.
+func (c *Config) lintCustom() []Warning {
+	var ws []Warning
+	for i, cu := range c.Custom {
+		if cu.Match == "" {
+			continue
+		}
+		re, err := syntax.Parse(cu.Match, syntax.Perl)
+		if err != nil { // an invalid match is a validation error, not a lint finding
+			continue
+		}
+		if hasOp(re, syntax.OpBeginText) && hasOp(re, syntax.OpEndText) && !matchesNewline(re) {
+			ws = append(ws, Warning{fmt.Sprintf("custom[%d].match", i),
+				"is anchored to the start and the end of the file but cannot match a newline, so it matches nothing: write (?m) in front of it to anchor ^ and $ to lines"})
+		}
+	}
+	return ws
+}
+
+// hasOp reports whether re or one of its subexpressions has operation op.
+func hasOp(re *syntax.Regexp, op syntax.Op) bool {
+	if re.Op == op {
+		return true
+	}
+	return slices.ContainsFunc(re.Sub, func(sub *syntax.Regexp) bool { return hasOp(sub, op) })
+}
+
+// matchesNewline reports whether re can match a text containing a newline.
+func matchesNewline(re *syntax.Regexp) bool {
+	switch re.Op {
+	case syntax.OpLiteral:
+		if slices.Contains(re.Rune, '\n') {
+			return true
+		}
+	case syntax.OpAnyChar:
+		return true
+	case syntax.OpCharClass:
+		// Rune holds the class as pairs of inclusive range bounds.
+		for i := 0; i+1 < len(re.Rune); i += 2 {
+			if re.Rune[i] <= '\n' && '\n' <= re.Rune[i+1] {
+				return true
+			}
+		}
+	}
+	return slices.ContainsFunc(re.Sub, matchesNewline)
 }
 
 // lintGroups reports the groups entries whose name is no group a policy can have.
