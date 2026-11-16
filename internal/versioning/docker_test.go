@@ -9,9 +9,11 @@ import (
 	"testing"
 )
 
-// The regexp implementation parseDocker replaced; kept as the reference for parity tests.
+// The regexp implementation parseDocker replaced; kept as the reference for parity tests. It
+// mirrors Renovate's docker versioning: the tag is split at the first "-" and the part before
+// it must match the version pattern.
 var (
-	refDockerRe     = regexp.MustCompile(`^(v?)(\d+(?:\.\d+)*)(.*)$`)
+	refDockerRe     = regexp.MustCompile(`^(v?)(\d+(?:\.\d+)*)(\w*)$`)
 	refCommitHashRe = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 )
 
@@ -19,11 +21,12 @@ func refParseDocker(s string) (dockerTag, bool) {
 	if refCommitHashRe.MatchString(s) && strings.ContainsAny(s, "abcdef") {
 		return dockerTag{}, false
 	}
-	m := refDockerRe.FindStringSubmatch(s)
+	ver, suffix, _ := strings.Cut(s, "-")
+	m := refDockerRe.FindStringSubmatch(ver)
 	if m == nil {
 		return dockerTag{}, false
 	}
-	t := dockerTag{prefix: m[1], suffix: m[3]}
+	t := dockerTag{prefix: m[1], pre: m[3], suffix: suffix}
 	for p := range strings.SplitSeq(m[2], ".") {
 		n, err := strconv.Atoi(p)
 		if err != nil {
@@ -38,7 +41,7 @@ func checkDockerParity(t *testing.T, s string) {
 	t.Helper()
 	want, wok := refParseDocker(s)
 	got, gok := parseDocker(s)
-	if wok != gok || want.prefix != got.prefix || want.suffix != got.suffix || !slices.Equal(want.parts, got.parts) {
+	if wok != gok || want.prefix != got.prefix || want.pre != got.pre || want.suffix != got.suffix || !slices.Equal(want.parts, got.parts) {
 		t.Errorf("parseDocker(%q) = %+v, %v; regexp = %+v, %v", s, got, gok, want, wok)
 	}
 }
@@ -63,26 +66,67 @@ func TestParseDockerParity(t *testing.T) {
 
 func TestParseDocker(t *testing.T) {
 	for _, tc := range []struct {
-		in             string
-		ok             bool
-		prefix, suffix string
-		parts          []int
+		in                  string
+		ok                  bool
+		prefix, pre, suffix string
+		parts               []int
 	}{
-		{in: "v1.2.3-alpine", ok: true, prefix: "v", suffix: "-alpine", parts: []int{1, 2, 3}},
-		{in: "1.2.", ok: true, suffix: ".", parts: []int{1, 2}},
-		{in: "1..2", ok: true, suffix: "..2", parts: []int{1}},
+		{in: "v1.2.3-alpine", ok: true, prefix: "v", suffix: "alpine", parts: []int{1, 2, 3}},
+		{in: "3.14.0rc2-slim", ok: true, pre: "rc2", suffix: "slim", parts: []int{3, 14, 0}},
+		{in: "3.14.10-slim", ok: true, suffix: "slim", parts: []int{3, 14, 10}},
+		{in: "1.2-alpine-3.20", ok: true, suffix: "alpine-3.20", parts: []int{1, 2}},
+		{in: "1.2.", ok: false},
+		{in: "1..2", ok: false},
 		{in: "1234567", ok: true, parts: []int{1234567}},
 		{in: "1a2b3c4", ok: false},
-		{in: "1a2b3c", ok: true, suffix: "a2b3c", parts: []int{1}},
+		{in: "1a2b3c", ok: true, pre: "a2b3c", parts: []int{1}},
 		{in: "1.2\n", ok: false},
 		{in: "1.99999999999999999999", ok: false},
 		{in: "vv1", ok: false},
 	} {
 		got, ok := parseDocker(tc.in)
-		if ok != tc.ok || got.prefix != tc.prefix || got.suffix != tc.suffix || !slices.Equal(got.parts, tc.parts) {
+		if ok != tc.ok || got.prefix != tc.prefix || got.pre != tc.pre || got.suffix != tc.suffix || !slices.Equal(got.parts, tc.parts) {
 			t.Errorf("parseDocker(%q) = %+v, %v", tc.in, got, ok)
 		}
 	}
+}
+
+// TestDockerPrereleaseUpdate covers Renovate's docker parsing of a prerelease tag: the
+// prerelease is not part of the suffix, so a prerelease tag can update to the stable release.
+func TestDockerPrereleaseUpdate(t *testing.T) {
+	s, ok := Get("docker")
+	if !ok {
+		t.Fatal("no docker scheme")
+	}
+	cur, stable := parseMust(t, "3.14.0rc2-slim"), parseMust(t, "3.14.10-slim")
+	if why := dockerCompat(cur, stable); why != "" {
+		t.Errorf("dockerCompat(3.14.0rc2-slim, 3.14.10-slim) = %q, want compatible", why)
+	}
+	if why := dockerCompat(stable, cur); why != "prerelease" {
+		t.Errorf("dockerCompat(3.14.10-slim, 3.14.0rc2-slim) = %q, want prerelease", why)
+	}
+	if why := dockerCompat(cur, parseMust(t, "3.15.0rc1-slim")); why != "prerelease" {
+		t.Errorf("dockerCompat(3.14.0rc2-slim, 3.15.0rc1-slim) = %q, want prerelease", why)
+	}
+	tags := []string{"3.14.0rc1-slim", "3.14.0rc2-slim", "3.14.0rc3-slim", "3.14.10-slim", "3.14.10-alpine", "3.15.0rc1-slim", "latest"}
+	if got, ok := s.Best("3.14.0rc2-slim", tags, nil, nil); !ok || got != "3.14.10-slim" {
+		t.Errorf("Best = %q, %v; want 3.14.10-slim", got, ok)
+	}
+	// A release outranks its prereleases, unlike a bytewise suffix comparison.
+	vs := []string{"3.13.0rc1", "3.13.0"}
+	s.Sort(vs)
+	if !slices.Equal(vs, []string{"3.13.0rc1", "3.13.0"}) {
+		t.Errorf("Sort = %v, want [3.13.0rc1 3.13.0]", vs)
+	}
+}
+
+func parseMust(t *testing.T, s string) dockerTag {
+	t.Helper()
+	v, ok := parseDocker(s)
+	if !ok {
+		t.Fatalf("parseDocker(%q) failed", s)
+	}
+	return v
 }
 
 func FuzzParseDocker(f *testing.F) {

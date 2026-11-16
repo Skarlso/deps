@@ -331,35 +331,39 @@ func commitHash(s string) bool {
 }
 
 type dockerTag struct {
-	prefix, suffix string
-	parts          []int
+	prefix, pre, suffix string
+	parts               []int
 }
 
-// parseDocker splits s into an optional "v" prefix, dot-separated decimal parts and the
-// remaining suffix (`v1.2.3-alpine` → "v", [1 2 3], "-alpine"). The release part is the longest
-// run of digit groups joined by single dots, so `1.2.` keeps the trailing dot as suffix. A tag
-// containing a newline, a commit hash, or a part overflowing int is not a version.
+// parseDocker splits s at the first "-" into a version and a suffix, then the version into an
+// optional "v" prefix, dot-separated decimal parts and a prerelease, as Renovate's docker
+// versioning does (`^(?<version>\d+(?:\.\d+)*)(?<prerelease>\w*)$` over the text before the
+// first "-"): `v1.2.3-alpine` → "v", [1 2 3], "", "alpine" and `3.14.0rc2-slim` → "", [3 14 0],
+// "rc2", "slim". Anything else before the first "-" (`1.2.`, `1..2`, `1.x`, a newline) is not a
+// version, nor is a commit hash or a part overflowing int.
 func parseDocker(s string) (dockerTag, bool) {
-	if commitHash(s) || strings.IndexByte(s, '\n') >= 0 {
+	if commitHash(s) {
 		return dockerTag{}, false
 	}
 	var t dockerTag
+	ver, suffix, _ := strings.Cut(s, "-")
+	t.suffix = suffix
 	i := 0
-	if i < len(s) && s[i] == 'v' {
-		t.prefix, i = s[:1], 1
+	if i < len(ver) && ver[i] == 'v' {
+		t.prefix, i = ver[:1], 1
 	}
 	// Count the parts first so parts is allocated once at its final size.
 	n, end := 0, i
 	for {
 		j := end
 		if n > 0 {
-			if j >= len(s) || s[j] != '.' {
+			if j >= len(ver) || ver[j] != '.' {
 				break
 			}
 			j++
 		}
 		k := j
-		for k < len(s) && s[k] >= '0' && s[k] <= '9' {
+		for k < len(ver) && ver[k] >= '0' && ver[k] <= '9' {
 			k++
 		}
 		if k == j {
@@ -370,18 +374,32 @@ func parseDocker(s string) (dockerTag, bool) {
 	if n == 0 {
 		return dockerTag{}, false
 	}
+	// Whatever follows the parts is the prerelease, which the pattern limits to word
+	// characters, so `1.2.` and `1.x` are not versions.
+	for k := end; k < len(ver); k++ {
+		switch c := ver[k]; {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c == '_':
+		default:
+			return dockerTag{}, false
+		}
+	}
+	t.pre = ver[end:]
 	t.parts = make([]int, 0, n)
-	for p := range strings.SplitSeq(s[i:end], ".") {
+	for p := range strings.SplitSeq(ver[i:end], ".") {
 		v, err := strconv.Atoi(p)
 		if err != nil {
 			return dockerTag{}, false
 		}
 		t.parts = append(t.parts, v)
 	}
-	t.suffix = s[end:]
 	return t, true
 }
 
+// dockerCompat is Renovate's isCompatible — equal suffix and equal release length, the
+// prerelease excluded, so `3.14.0rc2-slim` and `3.14.10-slim` are compatible — plus its
+// unstable filter: a prerelease is a candidate only for a current prerelease of the same
+// major.minor.patch (filterVersions), so `3.14.0rc2-slim` updates to `3.14.0rc3-slim` or to a
+// stable tag, never to `3.15.0rc1-slim`.
 func dockerCompat(cur, next dockerTag) string {
 	switch {
 	case next.prefix != cur.prefix:
@@ -390,15 +408,39 @@ func dockerCompat(cur, next dockerTag) string {
 		return "precision"
 	case next.suffix != cur.suffix:
 		return "suffix"
+	case next.pre != "" && (cur.pre == "" || !sameDockerRelease(cur, next)):
+		return "prerelease"
 	}
 	return ""
 }
 
+// sameDockerRelease reports whether a and b share their major, minor and patch, the three
+// parts Renovate's unstable filter compares.
+func sameDockerRelease(a, b dockerTag) bool {
+	for i := range min(len(a.parts), 3) {
+		if a.parts[i] != b.parts[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// compareDocker orders the release parts, then a release above its prereleases and two
+// prereleases bytewise, and finally the suffix, which Renovate orders in reverse.
 func compareDocker(a, b dockerTag) int {
 	if c := CompareTag(Tag{Parts: a.parts}, Tag{Parts: b.parts}); c != 0 {
 		return c
 	}
-	return strings.Compare(a.suffix, b.suffix)
+	switch {
+	case a.pre == b.pre:
+	case a.pre == "":
+		return 1
+	case b.pre == "":
+		return -1
+	default:
+		return strings.Compare(a.pre, b.pre)
+	}
+	return strings.Compare(b.suffix, a.suffix)
 }
 
 func dockerKind(cur, next dockerTag) dep.UpdateType {
