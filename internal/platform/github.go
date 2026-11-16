@@ -28,7 +28,7 @@ func NewClient(info Info, token string, c *http.Client) Client {
 	}
 	return &giteaClient{
 		api: info.APIURL, repo: info.Repo, c: c, headers: giteaHeaders(token), toPR: giteaPR,
-		forgejo: info.Kind == Forgejo,
+		forgejo: info.Kind == Forgejo, mergeGrace: mergeGrace,
 	}
 }
 
@@ -233,16 +233,25 @@ func (r *rest) DefaultBranch(ctx context.Context) (string, error) {
 }
 
 func (r *rest) GetPR(ctx context.Context, n int) (PR, error) {
-	var p apiPR
-	if err := r.do(ctx, http.MethodGet, prPath(r.repo, n), nil, &p, r.headers); err != nil {
+	p, err := r.getPR(ctx, n)
+	if p == nil {
 		return PR{}, err
 	}
-	if p.fromFork() {
-		// The PR is returned with the error: a caller that only reads metadata (deps preview
-		// reads the base branch) may use it deliberately; the bot treats the error as fatal.
-		return r.toPR(&p), forkError(n, p.Head.Repo.fullName())
+	return r.toPR(p), err
+}
+
+// getPR reads PR number as the forge reports it. A PR opened from a fork comes back with
+// forkError: a caller that only reads metadata (deps preview reads the base branch) may use
+// it deliberately; the bot treats the error as fatal.
+func (r *rest) getPR(ctx context.Context, n int) (*apiPR, error) {
+	var p apiPR
+	if err := r.do(ctx, http.MethodGet, prPath(r.repo, n), nil, &p, r.headers); err != nil {
+		return nil, err
 	}
-	return r.toPR(&p), nil
+	if p.fromFork() {
+		return &p, forkError(n, p.Head.Repo.fullName())
+	}
+	return &p, nil
 }
 
 func (r *rest) createPR(ctx context.Context, in prCreate) (PR, error) {

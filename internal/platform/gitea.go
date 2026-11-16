@@ -10,12 +10,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // giteaClient serves Gitea and Forgejo (same API surface).
 type giteaClient struct {
 	rest
-	forgejo bool // the merge form field is "Do" on Forgejo, "do" on Gitea
+	forgejo    bool          // the merge form field is "Do" on Forgejo, "do" on Gitea
+	mergeGrace time.Duration // see GetPR
 
 	labelsMu     sync.Mutex
 	labels       map[string]int64 // lowercase name -> id of the labels loaded so far
@@ -35,15 +37,74 @@ func giteaHeaders(token string) func(http.Header) {
 // the title there; the prefix is the forge's mark, not part of the title deps wrote, so it is
 // cut off again and reported as Draft. Callers compare the title with the one they would
 // write (closedFor), which a leading "WIP: " would never match.
+//
+// Only a "mergeable" the forges report as true is taken as mergeable; a false is left
+// unknown, which giteaClient.GetPR settles. Their mergeable is
+//
+//	pr.Status != Checking && pr.Status != Conflict && pr.Status != Error && !pr.IsWorkInProgress(ctx)
+//
+// (Mergeable of models/issues/pull.go, the same in both), so a false means a conflict, a
+// failed merge check, a check that has not run yet since the head moved, or a draft -- and
+// their API reports neither the status nor the WIP flag that would tell those apart.
 func giteaPR(p *apiPR) PR {
 	pr := p.pr()
 	pr.Merged = p.Merged
-	m := p.Mergeable != nil && *p.Mergeable
-	pr.Mergeable = &m
-	title, wip := cutPrefixFold(p.Title, wipPrefixes)
-	pr.Title = title
-	pr.Draft = pr.Draft || wip // older forges report no draft field
+	pr.Title, _ = cutPrefixFold(p.Title, wipPrefixes)
+	pr.Draft = giteaDraft(p)
+	if p.Mergeable != nil && *p.Mergeable {
+		pr.Mergeable = p.Mergeable
+	}
 	return pr
+}
+
+// giteaDraft reports whether p is a draft: the forges' draft field, and a title still
+// carrying a work-in-progress prefix, which is all an older forge without that field says.
+func giteaDraft(p *apiPR) bool { return p.Draft || hasPrefixFold(p.Title, wipPrefixes) }
+
+// giteaConflict reports whether the forge refuses to merge p for a reason it did not name:
+// not because it is a draft (which the forges always refuse), and not because it left the
+// field out. See giteaPR for what else hides behind a false.
+func giteaConflict(p *apiPR) bool {
+	return p.Mergeable != nil && !*p.Mergeable && !giteaDraft(p)
+}
+
+// mergeGrace is how long GetPR lets the forge's merge check finish before it takes a second
+// refusal for a conflict. Gitea and Forgejo run that check as a queued job (AddToTaskQueue
+// sets the status to "checking") that every push to the head branch schedules again; it
+// takes well under a second for the one-commit branches deps pushes.
+const mergeGrace = 2 * time.Second
+
+// GetPR reads the PR and settles the mergeability giteaPR leaves unknown. A PR the forge
+// refuses to merge without saying why is read once more after mergeGrace: a merge check that
+// was still running has finished by then, while a conflict is still a conflict, and only the
+// second refusal is reported as one. The caller rebuilds and force-pushes the branch of an
+// unmergeable PR, so a draft (which the forges never call mergeable) or a check that had not
+// run yet would otherwise rewrite the PR and start its CI again on every run.
+func (g *giteaClient) GetPR(ctx context.Context, n int) (PR, error) {
+	p, err := g.getPR(ctx, n)
+	if p == nil {
+		return PR{}, err
+	}
+	pr := giteaPR(p)
+	if err != nil || !giteaConflict(p) {
+		return pr, err
+	}
+	select {
+	case <-time.After(g.mergeGrace):
+	case <-ctx.Done():
+		return pr, ctx.Err()
+	}
+	again, err := g.getPR(ctx, n)
+	if again == nil || err != nil {
+		// The first answer stands, with its mergeability unknown: the caller asks again.
+		slog.DebugContext(ctx, "re-reading the pull request failed, mergeability stays unknown", "number", n, "err", err)
+		return pr, nil
+	}
+	pr = giteaPR(again)
+	if giteaConflict(again) {
+		pr.Mergeable = new(false)
+	}
+	return pr, nil
 }
 
 // wipPrefix marks a draft PR on Gitea and Forgejo; their default WORK_IN_PROGRESS_PREFIXES

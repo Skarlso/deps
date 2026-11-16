@@ -376,15 +376,15 @@ func fakeAPI(t *testing.T, kind Kind, totalPRs int) (*httptest.Server, *[]record
 
 func TestClients(t *testing.T) {
 	for _, tc := range []struct {
-		kind               Kind
-		auth, accept       string
-		listQuery          string
-		merged1            bool
-		mergeable1, merge3 *bool
+		kind         Kind
+		auth, accept string
+		listQuery    string
+		merged1      bool
+		getPR3       []string // the requests GetPR(3), which the forge refuses to merge, makes
 	}{
-		{GitHub, "Bearer tok", "application/vnd.github+json", "state=open&sort=updated&direction=desc&per_page=100&page=", true, nil, new(false)},
-		{Gitea, "token tok", "application/json", "state=open&sort=recentupdate&limit=50&page=", true, new(false), new(false)},
-		{Forgejo, "token tok", "application/json", "state=open&sort=recentupdate&limit=50&page=", true, new(false), new(false)},
+		{GitHub, "Bearer tok", "application/vnd.github+json", "state=open&sort=updated&direction=desc&per_page=100&page=", true, []string{"GET /repos/o/r/pulls/3"}},
+		{Gitea, "token tok", "application/json", "state=open&sort=recentupdate&limit=50&page=", true, []string{"GET /repos/o/r/pulls/3", "GET /repos/o/r/pulls/3"}},
+		{Forgejo, "token tok", "application/json", "state=open&sort=recentupdate&limit=50&page=", true, []string{"GET /repos/o/r/pulls/3", "GET /repos/o/r/pulls/3"}},
 	} {
 		t.Run(string(tc.kind), func(t *testing.T) {
 			per := 50
@@ -393,6 +393,9 @@ func TestClients(t *testing.T) {
 			}
 			srv, reqs := fakeAPI(t, tc.kind, per*2+3)
 			c := NewClient(Info{Kind: tc.kind, APIURL: srv.URL, Repo: "o/r"}, "tok", srv.Client())
+			if g, ok := c.(*giteaClient); ok {
+				g.mergeGrace = 0 // no waiting between the two reads of GetPR
+			}
 			ctx := context.Background()
 
 			if b, err := c.DefaultBranch(ctx); err != nil || b != "main" {
@@ -409,7 +412,7 @@ func TestClients(t *testing.T) {
 				t.Fatalf("ListPRs maxPages len %d %v", len(prs), err)
 			}
 			p1, err := c.GetPR(ctx, 1)
-			if err != nil || !p1.Merged || p1.Head != "deps/a" || p1.Base != "main" || p1.URL != "u" || p1.Title != "t" || !p1.CreatedAt.Equal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) || !eqPtr(p1.Mergeable, tc.mergeable1) {
+			if err != nil || !p1.Merged || p1.Head != "deps/a" || p1.Base != "main" || p1.URL != "u" || p1.Title != "t" || !p1.CreatedAt.Equal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) || p1.Mergeable != nil {
 				t.Fatalf("GetPR 1 %+v %v", p1, err)
 			}
 			p2, _ := c.GetPR(ctx, 2)
@@ -417,7 +420,7 @@ func TestClients(t *testing.T) {
 				t.Fatalf("GetPR 2 %+v", p2)
 			}
 			p3, _ := c.GetPR(ctx, 3)
-			if !eqPtr(p3.Mergeable, tc.merge3) {
+			if !eqPtr(p3.Mergeable, new(false)) {
 				t.Fatalf("GetPR 3 %+v", p3)
 			}
 			np, err := c.CreatePR(ctx, "deps/a", "main", "t", "b", false)
@@ -451,9 +454,11 @@ func TestClients(t *testing.T) {
 				"GET /repos/o/r/pulls?" + tc.listQuery + "2",
 				"GET /repos/o/r/pulls?" + tc.listQuery + "3",
 				"GET /repos/o/r/pulls?" + tc.listQuery + "1",
-				"GET /repos/o/r/pulls/1", "GET /repos/o/r/pulls/2", "GET /repos/o/r/pulls/3",
-				"POST /repos/o/r/pulls", "PATCH /repos/o/r/pulls/2", "PATCH /repos/o/r/pulls/2", "PATCH /repos/o/r/pulls/9",
+				"GET /repos/o/r/pulls/1", "GET /repos/o/r/pulls/2",
 			}
+			wantURIs = append(wantURIs, tc.getPR3...)
+			wantURIs = append(wantURIs,
+				"POST /repos/o/r/pulls", "PATCH /repos/o/r/pulls/2", "PATCH /repos/o/r/pulls/2", "PATCH /repos/o/r/pulls/9")
 			if len(rs) != len(wantURIs) {
 				t.Fatalf("got %d requests", len(rs))
 			}
@@ -462,13 +467,14 @@ func TestClients(t *testing.T) {
 					t.Fatalf("req %d = %q, want %q", i, got, w)
 				}
 			}
-			if b := rs[8].body; b["title"] != "t" || b["head"] != "deps/a" || b["base"] != "main" || b["body"] != "b" {
+			create, update, closed := rs[len(rs)-4], rs[len(rs)-3], rs[len(rs)-2]
+			if b := create.body; b["title"] != "t" || b["head"] != "deps/a" || b["base"] != "main" || b["body"] != "b" {
 				t.Fatalf("create body %v", b)
 			}
-			if b := rs[9].body; b["title"] != "t2" || b["body"] != "b2" || b["state"] != nil {
+			if b := update.body; b["title"] != "t2" || b["body"] != "b2" || b["state"] != nil {
 				t.Fatalf("update body %v", b)
 			}
-			if b := rs[10].body; b["state"] != "closed" || len(b) != 1 {
+			if b := closed.body; b["state"] != "closed" || len(b) != 1 {
 				t.Fatalf("close body %v", b)
 			}
 		})
@@ -597,6 +603,85 @@ func TestDraftPRs(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Gitea and Forgejo answer "mergeable" with one boolean that is false for a draft, for a
+// conflict, for a failed merge check and while that check still runs (every push to the head
+// branch schedules it again), and their API tells none of those apart. Taking every false for
+// a conflict makes the bot rebuild, force-push and rewrite the PR on every single run of a
+// draft PR, whose title carries the forges' WIP mark forever, so a false is reported as
+// unknown and GetPR settles it by reading the PR once more.
+func TestGiteaMergeableIsNotAlwaysAConflict(t *testing.T) {
+	const ok = `{"number":1,"state":"open","title":"chore: x","mergeable":true,"head":{"ref":"deps/a"}}`
+	const no = `{"number":1,"state":"open","title":"chore: x","mergeable":false,"head":{"ref":"deps/a"}}`
+	for _, tc := range []struct {
+		name    string
+		answers []string // PR JSON per read, the last one repeated
+		want    *bool
+		draft   bool
+		reads   int
+	}{
+		{"mergeable", []string{ok}, new(true), false, 1},
+		{"draft by the WIP title prefix", []string{`{"number":1,"state":"open","title":"WIP: chore: x","mergeable":false,"head":{"ref":"deps/a"}}`}, nil, true, 1},
+		{"draft by the draft field", []string{`{"number":1,"state":"open","title":"chore: x","draft":true,"mergeable":false,"head":{"ref":"deps/a"}}`}, nil, true, 1},
+		{"merge check of a fresh push still running", []string{no, ok}, new(true), false, 2},
+		{"conflict", []string{no, no}, new(false), false, 2},
+		{"no mergeable field", []string{`{"number":1,"state":"open","title":"chore: x","head":{"ref":"deps/a"}}`}, nil, false, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var reads int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				answer := tc.answers[min(reads, len(tc.answers)-1)]
+				if r.URL.Path == "/repos/o/r/pulls/1" {
+					reads++
+				}
+				mu.Unlock()
+				if r.URL.Path == "/repos/o/r/pulls" {
+					io.WriteString(w, "["+answer+"]")
+					return
+				}
+				io.WriteString(w, answer)
+			}))
+			t.Cleanup(srv.Close)
+			c := NewClient(Info{Kind: Gitea, APIURL: srv.URL, Repo: "o/r"}, "tok", srv.Client()).(*giteaClient)
+			c.mergeGrace = 0
+			ctx := t.Context()
+
+			pr, err := c.GetPR(ctx, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !eqPtr(pr.Mergeable, tc.want) || pr.Draft != tc.draft {
+				t.Errorf("GetPR mergeable %s draft %v, want %s draft %v", ptrStr(pr.Mergeable), pr.Draft, ptrStr(tc.want), tc.draft)
+			}
+			if reads != tc.reads {
+				t.Errorf("GetPR read the PR %d times, want %d", reads, tc.reads)
+			}
+			// The listing never settles a refused merge: it would cost a request per PR, and
+			// the bot reads the PR itself when the listing leaves its mergeability unknown.
+			prs, err := c.ListPRs(ctx, "open", 1)
+			if err != nil || len(prs) != 1 {
+				t.Fatalf("ListPRs %+v %v", prs, err)
+			}
+			wantListed := tc.want
+			if wantListed != nil && !*wantListed {
+				wantListed = nil
+			}
+			if !eqPtr(prs[0].Mergeable, wantListed) {
+				t.Errorf("ListPRs mergeable %s, want %s", ptrStr(prs[0].Mergeable), ptrStr(wantListed))
+			}
+		})
+	}
+}
+
+// ptrStr renders an optional bool for test failures.
+func ptrStr(b *bool) string {
+	if b == nil {
+		return "unknown"
+	}
+	return fmt.Sprint(*b)
 }
 
 // A pull request opened from a fork is a stranger's, whatever its head branch is called, so
