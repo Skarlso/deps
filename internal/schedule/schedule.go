@@ -49,14 +49,28 @@ type Trigger struct {
 type field struct {
 	name     string
 	min, max int
+	names    map[string]int // three-letter names, lowercase; nil when the field has none
 }
 
+// monthNames and dowNames are the three-letter names cron accepts in the month and day of
+// week fields, case-insensitively, as GitHub (`1-12 or JAN-DEC`, `0-6 or SUN-SAT`) and
+// Renovate's cron-parser do. Longer names (`MONDAY`) are not valid in either.
+var (
+	monthNames = map[string]int{
+		"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+		"jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+	}
+	dowNames = map[string]int{
+		"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6,
+	}
+)
+
 var fields = [...]field{
-	{"minute", 0, 59},
-	{"hour", 0, 23},
-	{"day of month", 1, 31},
-	{"month", 1, 12},
-	{"day of week", 0, 7},
+	{name: "minute", min: 0, max: 59},
+	{name: "hour", min: 0, max: 23},
+	{name: "day of month", min: 1, max: 31},
+	{name: "month", min: 1, max: 12, names: monthNames},
+	{name: "day of week", min: 0, max: 7, names: dowNames},
 }
 
 // window is a time window, one of later's schedules. A run time is inside when its hour,
@@ -142,7 +156,8 @@ func (e *entry) contains(t time.Time) bool {
 
 // Parse validates schedule entries and returns them as a Set whose windows are evaluated
 // in loc (nil = UTC). Cron fields accept "*", n, a-b, comma lists and "/step" on "*" or
-// ranges; day of week is 0-7. No entries yield a nil Set (always).
+// ranges; month and day of week also accept their three-letter names (JAN-DEC, SUN-SAT,
+// case-insensitive); day of week is 0-7. No entries yield a nil Set (always).
 func Parse(exprs []string, loc *time.Location) (*Set, error) {
 	if len(exprs) == 0 {
 		return nil, nil
@@ -267,9 +282,14 @@ func parseField(s string, f field) (uint64, error) {
 	return mask, nil
 }
 
+// num parses one endpoint of a cron field: a number, or in the month and day of week
+// fields one of their three-letter names (case-insensitive), as in `0 5 * * MON-FRI`.
 func num(s string, f field) (int, error) {
 	n, err := strconv.Atoi(s)
 	if err != nil {
+		if v, ok := f.names[strings.ToLower(s)]; ok {
+			return v, nil
+		}
 		return 0, fmt.Errorf("invalid value %q", s)
 	}
 	if n < f.min || n > f.max {

@@ -264,6 +264,60 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// Cron accepts three-letter month and day of week names, as GitHub's cron syntax
+// (`1-12 or JAN-DEC`, `0-6 or SUN-SAT`) and Renovate's cron parser do.
+func TestCronNames(t *testing.T) {
+	same := []struct{ named, numeric string }{
+		{"0 5 * * MON-FRI", "0 5 * * 1-5"},
+		{"0 5 * * mon", "0 5 * * 1"},
+		{"0 0 1 JAN *", "0 0 1 1 *"},
+		{"0 0 * * SUN-SAT", "0 0 * * 0-6"},
+		{"* 5 * * Mon,Wed", "* 5 * * 1,3"},
+		{"* * * JAN-DEC/2 *", "* * * 1-12/2 *"},
+	}
+	for _, tt := range same {
+		named, err := parseCron(tt.named)
+		if err != nil {
+			t.Errorf("%q: %v", tt.named, err)
+			continue
+		}
+		numeric, err := parseCron(tt.numeric)
+		if err != nil {
+			t.Fatalf("%q: %v", tt.numeric, err)
+		}
+		if named != numeric {
+			t.Errorf("%q = %v, want %q = %v", tt.named, named, tt.numeric, numeric)
+		}
+	}
+
+	// The same windows, so the entry matches the same run times.
+	for _, c := range []string{"* 5 * * MON-FRI", "* 5 * * 1-5"} {
+		s, err := Parse([]string{c}, time.UTC)
+		if err != nil {
+			t.Fatalf("%q: %v", c, err)
+		}
+		// 2026-11-09 is a Monday, 2026-11-14 a Saturday.
+		if !s.Matches(Trigger{Time: time.Date(2026, 11, 9, 5, 30, 0, 0, time.UTC)}) {
+			t.Errorf("%q does not match Monday 5:30", c)
+		}
+		if s.Matches(Trigger{Time: time.Date(2026, 11, 14, 5, 30, 0, 0, time.UTC)}) {
+			t.Errorf("%q matches Saturday 5:30", c)
+		}
+	}
+
+	for _, tt := range []struct{ expr, want string }{
+		{"0 0 * * FOO", `day of week: invalid value "FOO"`},
+		{"0 0 * * MONDAY", `day of week: invalid value "MONDAY"`},
+		{"0 0 * JAN-FOO *", `month: invalid value "FOO"`},
+		{"0 MON * * *", `hour: invalid value "MON"`},
+	} {
+		err := ValidateCron(tt.expr)
+		if err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("%q: got %v, want %q", tt.expr, err, tt.want)
+		}
+	}
+}
+
 func TestDetect(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) string {
