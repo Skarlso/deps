@@ -2020,7 +2020,7 @@ RE2 regexp the selected values must match; its (?P\<version>) group, else the wh
 
 ## `groups`
 
-Settings per group, by group name: the name a rule sets with group, or a built-in group (`<monorepo> monorepo`, ruby, vcpkg). They apply to every update whose policy group is that name after the top level and all rules, so they win over both; security updates follow them like rule settings, apart from schedule and dashboardApproval. pin and rangeStrategy are decided before the group is known and are not accepted. Extended files merge it by group name.
+Settings per group, by group name: the name a rule sets with group, or a built-in group (`<monorepo> monorepo`, ruby, vcpkg). They apply to every update whose policy group is that name after the top level and all rules, so they win over both; security updates follow them like rule settings, apart from schedule and dashboardApproval. slug, commitType and commitScope describe the group's PR itself: its branch topic and the conventional-commit type and scope of its title. pin and rangeStrategy are decided before the group is known and are not accepted. Extended files merge it by group name.
 
 - **Type:** map of name → object
 
