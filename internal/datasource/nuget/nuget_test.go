@@ -71,6 +71,11 @@ func serve(t *testing.T, hits *atomic.Int32) *httptest.Server {
 			fmt.Fprint(w, `{"versions":["1.0.0","1.1.0+sha.abc","13.0.5"]}`)
 		case "/private/flat/internal.lib/1.1.0/internal.lib.nuspec":
 			http.NotFound(w, r)
+		// An Artifactory-style v3 feed: a service index whose URL does not end in `.json`.
+		case "/artifactory/api/nuget/v3/myrepo":
+			fmt.Fprintf(w, `{"version":"3.0.0","resources":[{"@id":"%s/artifactory/flat","@type":"PackageBaseAddress/3.0.0"}]}`, srv.URL)
+		case "/artifactory/flat/internal.lib/index.json":
+			fmt.Fprint(w, `{"versions":["2.0.0","2.1.0"]}`)
 		case "/empty/index.json":
 			fmt.Fprint(w, `{"version":"3.0.0","resources":[{"@id":"x","@type":"SearchQueryService"}]}`)
 		case "/broken/index.json":
@@ -217,5 +222,44 @@ func TestCredentialsAndForge(t *testing.T) {
 		if got := onForge(raw); got != want {
 			t.Errorf("onForge(%q) = %v", raw, got)
 		}
+	}
+}
+
+// TestProtocolVersionFragment covers feeds whose protocol version is declared by the
+// `#protocolVersion=` fragment of their URL (the nuget manager appends it for a nuget.config
+// `protocolVersion` attribute): the fragment decides, not the `.json` suffix, and it never
+// reaches the server.
+func TestProtocolVersionFragment(t *testing.T) {
+	for _, tt := range []struct {
+		url, want string
+		v3        bool
+	}{
+		{"https://host/artifactory/api/nuget/v3/myrepo#protocolVersion=3", "https://host/artifactory/api/nuget/v3/myrepo", true},
+		{"https://host/feed/index.json#protocolVersion=2", "https://host/feed/index.json", false},
+		{"https://host/feed/index.json", "https://host/feed/index.json", true},
+		{"https://host/feed/index.JSON?x=1", "https://host/feed/index.JSON?x=1", true},
+		{"https://www.powershellgallery.com/api/v2", "https://www.powershellgallery.com/api/v2", false},
+		{"https://host/feed/index.json#other", "https://host/feed/index.json#other", true},
+	} {
+		if got, is := v3(tt.url); got != tt.want || is != tt.v3 {
+			t.Errorf("v3(%q) = %q, %v, want %q, %v", tt.url, got, is, tt.want, tt.v3)
+		}
+	}
+
+	var hits atomic.Int32
+	srv := serve(t, &hits)
+	s := newSource(srv, nil)
+	d := dep.Dep{Name: "Internal.Lib", Source: "art=" + srv.URL + "/artifactory/api/nuget/v3/myrepo#protocolVersion=3"}
+	rels, err := s.Releases(t.Context(), d, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := versionsOf(rels); !slices.Equal(got, []string{"2.0.0", "2.1.0"}) {
+		t.Errorf("releases = %v", got)
+	}
+	// A `.json` feed declared as v2 is not read.
+	v2 := dep.Dep{Name: "Internal.Lib", Source: srv.URL + "/v3/index.json#protocolVersion=2"}
+	if _, err := s.Releases(t.Context(), v2, ""); err == nil || !strings.Contains(err.Error(), "v2 feed") {
+		t.Errorf("v2 fragment: %v", err)
 	}
 }

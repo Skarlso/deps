@@ -491,3 +491,23 @@ func TestJSONBOM(t *testing.T) {
 		t.Errorf("tool span = %q", got)
 	}
 }
+
+// TestSourceProtocolVersion covers a feed that declares protocolVersion="3" without an
+// `index.json` URL, as Artifactory and Nexus repositories do: the version has to reach the
+// datasource, which reads v3 feeds only, as the `#protocolVersion=3` fragment NuGet uses.
+func TestSourceProtocolVersion(t *testing.T) {
+	dir := write(t, map[string]string{
+		"nuget.config": `<configuration><packageSources><clear />
+  <add key="art" value="https://host/artifactory/api/nuget/v3/myrepo" protocolVersion="3" />
+  <add key="old" value="https://host/artifactory/api/nuget/myrepo" protocolVersion="2" />
+  <add key="odd" value="https://host/feed/index.json" protocolVersion="x" />
+</packageSources></configuration>`,
+		"a.csproj": `<Project><ItemGroup><PackageReference Include="Any" Version="1.0.0" /></ItemGroup></Project>`,
+	})
+	got := run(t, dir, "nuget.config", "a.csproj")
+	want := "art=https://host/artifactory/api/nuget/v3/myrepo#protocolVersion=3 " +
+		"old=https://host/artifactory/api/nuget/myrepo#protocolVersion=2 odd=https://host/feed/index.json"
+	if d := find(t, got["a.csproj"], DepTypeNuGet, "Any"); d.Source != want {
+		t.Errorf("source = %q, want %q", d.Source, want)
+	}
+}

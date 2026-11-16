@@ -63,11 +63,13 @@ type Source struct {
 	floors map[string]string // lower-case id → lowest planned version, "" = unbounded
 }
 
-// feed is one package source of a dep: its nuget.config key ("" when none), URL and the
-// credentials sent to its host (nil when none), from the key's NuGetPackageSourceCredentials_
-// variable, else from the nuget.config of the dep's directory.
+// feed is one package source of a dep: its nuget.config key ("" when none), URL (without the
+// protocol version fragment), whether it is a v3 feed (see v3) and the credentials sent to its
+// host (nil when none), from the key's NuGetPackageSourceCredentials_ variable, else from the
+// nuget.config of the dep's directory.
 type feed struct {
 	key, url string
+	v3       bool
 	cred     *credential
 }
 
@@ -244,23 +246,32 @@ func (s *Source) feeds(d dep.Dep) []feed {
 				f.cred = &c
 			}
 		}
+		f.url, f.v3 = v3(f.url)
 		if f.url == DefaultURL {
-			f.url = s.def
+			f.url, f.v3 = v3(s.def)
 		}
 		out = append(out, f)
 	}
 	if len(out) == 0 {
-		out = []feed{{url: s.def}}
+		u, is := v3(s.def)
+		out = []feed{{url: u, v3: is}}
 	}
 	return out
 }
 
-// v3 reports whether the feed URL is a v3 service index (`…/index.json`); v2 feeds
-// (`https://www.powershellgallery.com/api/v2`) serve the OData API, which is not read.
-func v3(u string) bool {
-	u, _, _ = strings.Cut(u, "?")
-	u, _, _ = strings.Cut(u, "#")
-	return strings.HasSuffix(strings.ToLower(u), ".json")
+// v3 reports whether the feed URL is a v3 service index and returns it without the
+// `#protocolVersion=<2|3>` fragment NuGet's protocolVersion attribute adds (see the nuget
+// manager): that fragment decides, else a `…/index.json` path does. The rest are v2 feeds
+// (`https://www.powershellgallery.com/api/v2`), which serve the OData API and are not read.
+func v3(u string) (string, bool) {
+	if base, frag, ok := strings.Cut(u, "#"); ok {
+		if v, ok := strings.CutPrefix(frag, "protocolVersion="); ok && (strings.HasPrefix(v, "2") || strings.HasPrefix(v, "3")) {
+			return base, v[0] == '3'
+		}
+	}
+	p, _, _ := strings.Cut(u, "?")
+	p, _, _ = strings.Cut(p, "#")
+	return u, strings.HasSuffix(strings.ToLower(p), ".json")
 }
 
 // lookup returns the listing of d's package merged over its feeds, down to the version d
@@ -287,7 +298,7 @@ func (s *Source) lookup(ctx context.Context, d dep.Dep) (*pkg, error) {
 			v2   = 0
 		)
 		for i, f := range feeds {
-			if !v3(f.url) {
+			if !f.v3 {
 				v2++
 				slog.DebugContext(ctx, "nuget v2 feed not read", "feed", httpx.Redact(f.url), "name", d.Name)
 				continue

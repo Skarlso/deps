@@ -51,9 +51,10 @@ type configXML struct {
 }
 
 type entryXML struct {
-	XMLName xml.Name
-	Key     string `xml:"key,attr"`
-	Value   string `xml:"value,attr"`
+	XMLName  xml.Name
+	Key      string `xml:"key,attr"`
+	Value    string `xml:"value,attr"`
+	Protocol string `xml:"protocolVersion,attr"`
 }
 
 // parseConfig reads a nuget.config (`<configuration>`).
@@ -71,7 +72,13 @@ func parseConfig(src []byte) (*nugetConfig, error) {
 			c.clear, c.sources = true, nil
 		case "add":
 			if e.Key != "" && e.Value != "" {
-				c.sources = append(c.sources, feed{key: e.Key, url: e.Value})
+				// A declared protocolVersion travels to the datasource as the fragment NuGet's
+				// own clients accept, as Renovate does: a v3 feed need not end in `index.json`.
+				u := e.Value
+				if e.Protocol == "2" || e.Protocol == "3" {
+					u += "#protocolVersion=" + e.Protocol
+				}
+				c.sources = append(c.sources, feed{key: e.Key, url: u})
 			}
 		case "remove":
 			c.sources = append(c.sources, feed{key: e.Key})
