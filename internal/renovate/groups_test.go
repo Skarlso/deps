@@ -286,6 +286,28 @@ func TestLoadHoistsGroupSettings(t *testing.T) {
 	}
 }
 
+// Renovate's groupSlug is the branch topic of the group, so it becomes groups.<name>.slug
+// and leaves the rules; two rules of one group that disagree keep the first value.
+func TestLoadGroupSlug(t *testing.T) {
+	res, err := load(t, `{packageRules: [
+		{matchManagers: ['npm'], groupName: 'npm dependencies', groupSlug: 'npm-deps'},
+		{matchManagers: ['gomod'], groupName: 'npm dependencies', groupSlug: 'other'}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `  npm dependencies:
+    slug: npm-deps`
+	if got := section(t, res, "groups"); got != want {
+		t.Errorf("groups:\n%s\nwant:\n%s", got, want)
+	}
+	if got := section(t, res, "rules"); strings.Contains(got, "groupSlug") {
+		t.Errorf("rules keep groupSlug:\n%s", got)
+	}
+	if !slices.ContainsFunc(res.Notes, func(n Note) bool { return strings.Contains(n.Msg, `already uses the branch topic "npm-deps"`) }) {
+		t.Errorf("no note for the conflicting slug: %+v", res.Notes)
+	}
+}
+
 // TestExampleOCMGroups checks the groups of docs/examples-ocm.deps.yaml: written back onto
 // every rule of their group (the file before groups existed), every dep gets the same
 // policies.

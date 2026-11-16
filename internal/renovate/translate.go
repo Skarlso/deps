@@ -350,7 +350,7 @@ var infoKeys = func() map[string]bool {
 		printConfig dependencyDashboardHeader dependencyDashboardFooter dependencyDashboardAutoclose
 		dependencyDashboardOSVVulnerabilitySummary dependencyDashboardCategory customizeDashboard userStrings
 		branchConcurrentLimit commitHourlyLimit branchNameStrict branchTopic hashedBranchLength
-		fetchChangeLogs recreateWhen suppressNotifications ignoreTests internalChecksFilter
+		groupSlug fetchChangeLogs recreateWhen suppressNotifications ignoreTests internalChecksFilter
 		internalChecksAsSuccess gitNoVerify statusCheckNames cloneSubmodules persistRepoData confidential
 		respectLatest hostRules postUpdateOptions semanticCommits`) {
 		m[k] = true
@@ -420,6 +420,9 @@ type translator struct {
 	cdKept    map[string]bool // names in cds
 	custom    []item
 	rules     []item
+	// slugs are the groupSlug values of the translated rules by group name, in first-seen
+	// order; they become groups.<name>.slug.
+	slugs omap
 	// exclusionRules are appended after every other rule (see exclusions).
 	exclusionRules []item
 	dashboard      bool            // the translated dependencyDashboard; rule settings like dashboardApproval need it
@@ -874,7 +877,7 @@ func (t *translator) translate(cfg map[string]any) omap {
 		t.addRule("vulnerabilityAlerts", omap{{"securityGroup", securityGroup}})
 	}
 	t.rules = append(t.rules, t.exclusionRules...)
-	groups := hoistGroupSettings(t.rules)
+	groups := mergeSlugs(hoistGroupSettings(t.rules), t.slugs)
 
 	for _, k := range slices.Sorted(func(yield func(string) bool) {
 		for k := range cfg {

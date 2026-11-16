@@ -406,9 +406,20 @@ func TestRenovateHintTargets(t *testing.T) {
 	}
 }
 
-// hasFieldPath reports whether the dotted yaml key path exists in struct typ.
+// hasFieldPath reports whether the dotted yaml key path exists in struct typ; a `<name>`
+// element stands for the key of a map (groups.<name>.slug) and descends into its value type.
 func hasFieldPath(d *decoder, typ reflect.Type, path string) bool {
 	for key := range strings.SplitSeq(path, ".") {
+		if key == "<name>" {
+			if typ.Kind() != reflect.Map {
+				return false
+			}
+			typ = typ.Elem()
+			for typ.Kind() == reflect.Pointer {
+				typ = typ.Elem()
+			}
+			continue
+		}
 		i := slices.IndexFunc(d.structFields(typ), func(f structField) bool { return f.name == key })
 		if i < 0 {
 			return false

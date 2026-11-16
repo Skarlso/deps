@@ -184,7 +184,6 @@ customDatasources:
   - [`rules[].replacementVersion`](#rulesreplacementversion)
   - [`rules[].replacementPrefix`](#rulesreplacementprefix)
   - [`rules[].group`](#rulesgroup)
-  - [`rules[].groupSlug`](#rulesgroupslug)
   - [`rules[].securityGroup`](#rulessecuritygroup)
   - [`rules[].commitType`](#rulescommittype)
   - [`rules[].commitScope`](#rulescommitscope)
@@ -230,6 +229,7 @@ customDatasources:
   - [`groups.<name>.prHeader`](#groupsnameprheader)
   - [`groups.<name>.prFooter`](#groupsnameprfooter)
   - [`groups.<name>.dashboardApproval`](#groupsnamedashboardapproval)
+  - [`groups.<name>.slug`](#groupsnameslug)
 - [`lockFileMaintenance`](#lockfilemaintenance)
   - [`lockFileMaintenance.enabled`](#lockfilemaintenanceenabled)
   - [`lockFileMaintenance.schedule`](#lockfilemaintenanceschedule)
@@ -1619,12 +1619,6 @@ Group name: all deps with the same group share one PR.
 - Security updates are not members (except of a shared version definition, which cannot be split); [`securityGroup`](#rulessecuritygroup) groups them apart.
 - **Settings** shared by the group's PR (schedule, labels, automerge, …) are written once in [`groups`](#groups) instead of on every rule setting the group.
 
-### `rules[].groupSlug`
-
-Branch topic of the group's PR (Renovate's groupSlug): the branch is \<prefix>group/\<slug of groupSlug> instead of \<prefix>group/\<slug of group>. The last matching rule setting it wins; it only renames the branch, deps still groups by group name.
-
-- **Type:** string
-
 ### `rules[].securityGroup`
 
 Group name for the security updates of matching deps: those with the same securityGroup share one PR on \<prefix>group/\<slug>-security, apart from non-security updates (also of a group with the same name). Without it every security update gets its own PR.
@@ -2167,6 +2161,12 @@ Overrides prFooter for the updates of the group, after the top level and every r
 Overrides dashboardApproval for the updates of the group, after the top level and every rule (see the top-level dashboardApproval).
 
 - **Type:** boolean
+
+### `groups.<name>.slug`
+
+Branch topic of the group's PR (Renovate's groupSlug): the branch is \<branchPrefix>group/\<slug> instead of \<branchPrefix>group/\<slug of the group name>. It renames the branch only; the updates of the group share one PR either way.
+
+- **Type:** string
 
 ## `lockFileMaintenance`
 

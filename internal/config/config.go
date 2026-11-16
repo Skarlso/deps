@@ -335,6 +335,8 @@ type Settings struct {
 // schema documents its keys with generated descriptions (variant "group").
 type GroupSettings struct {
 	Settings `yaml:",inline" jsonschema_variant:"group"`
+	// Slug replaces the group name in the branch of the group's PR (Renovate's groupSlug).
+	Slug string `yaml:"slug" jsonschema_description:"Branch topic of the group's PR (Renovate's groupSlug): the branch is <branchPrefix>group/<slug> instead of <branchPrefix>group/<slug of the group name>. It renames the branch only; the updates of the group share one PR either way."`
 
 	source string // the file the entry is written in (Source)
 	line   int    // its line there
@@ -344,9 +346,10 @@ type GroupSettings struct {
 // there; "" when it was not loaded from a file.
 func (g *GroupSettings) Source() (file string, line int) { return g.source, g.line }
 
-// GroupKeys are the keys groups entries accept: the Settings keys but the pre-policy ones.
+// GroupKeys are the keys groups entries accept: slug, and the Settings keys but the
+// pre-policy ones.
 var GroupKeys = func() []string {
-	var out []string
+	out := []string{"slug"}
 	for _, f := range keyFields(reflect.TypeFor[Settings]()) {
 		if k := yamlKey(f); !slices.Contains(PrePolicyKeys, k) {
 			out = append(out, k)
@@ -648,7 +651,6 @@ type Rule struct {
 	ReplacementVersion string   `yaml:"replacementVersion" jsonschema_description:"Version written with replacementName (the new package's version; an npm range keeps its operator); empty keeps the current version. Requires replacementName."`
 	ReplacementPrefix  string   `yaml:"replacementPrefix" jsonschema_description:"Prefix of the dep name that replacementName replaces, for moves of many names at once (Renovate's replacementNameTemplate with replace): with replacementPrefix: k8s.gcr.io/ and replacementName: registry.k8s.io/, k8s.gcr.io/pause becomes registry.k8s.io/pause. Deps whose name does not start with it get no replacement from the rule. Requires replacementName."`
 	Group              string   `yaml:"group" jsonschema_description:"Group name: all deps with the same group share one PR."`
-	GroupSlug          string   `yaml:"groupSlug" jsonschema_description:"Branch topic of the group's PR (Renovate's groupSlug): the branch is <prefix>group/<slug of groupSlug> instead of <prefix>group/<slug of group>. The last matching rule setting it wins; it only renames the branch, deps still groups by group name."`
 	SecurityGroup      string   `yaml:"securityGroup" jsonschema_description:"Group name for the security updates of matching deps: those with the same securityGroup share one PR on <prefix>group/<slug>-security, apart from non-security updates (also of a group with the same name). Without it every security update gets its own PR."`
 	CommitType         string   `yaml:"commitType" jsonschema_description:"Conventional commit type of commit and PR titles; default fix for production deps (gomod direct, npm, cargo, poetry, pub and bundler dependencies, composer require, pep621 project.dependencies, pipenv packages, elm direct and dependencies, julia deps, mix prod, gleam dependencies), chore otherwise. Security updates always use fix."`
 	CommitScope        *string  `yaml:"commitScope" jsonschema_description:"Conventional commit scope; default deps, empty string means no scope ('chore: ...')."`

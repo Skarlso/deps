@@ -23,7 +23,7 @@ var updateTypeBlocks = []struct{ key, typ string }{
 
 // effectOrder is the output order of rule effects (the field order of config.Rule).
 var effectOrder = []string{"ignore", "pin", "allow", "rangeStrategy", "versioning", "extractVersion", "registryUrls", "replacementName",
-	"replacementVersion", "replacementPrefix", "separate", "group", "groupSlug", "commitType", "commitScope", "schedule", "additionalBranchPrefix",
+	"replacementVersion", "replacementPrefix", "separate", "group", "commitType", "commitScope", "schedule", "additionalBranchPrefix",
 	"minimumReleaseAge", "minimumReleaseAgeBehaviour", "abandonmentThreshold", "automerge", "automergeStrategy", "automergeType",
 	"labels", "addLabels", "reviewers", "assignees", "prTitle", "prHeader", "prFooter", "postUpgradeTasks", "dashboardApproval",
 	"draftPR", "prCreation"}
@@ -648,6 +648,19 @@ func (t *translator) effects(origin string, r map[string]any) map[string]effect 
 				v = ""
 			}
 			set("commitScope", v)
+		case "groupSlug":
+			// The branch topic belongs to the group, not to the rule: it becomes
+			// groups.<groupName>.slug.
+			s, isStr := v.(string)
+			g, _ := r["groupName"].(string)
+			switch {
+			case !isStr || s == "":
+				t.n.warn(p, "must be a non-empty string; ignored")
+			case g == "":
+				t.n.info(p, "the rule sets no groupName; ignored")
+			default:
+				t.groupSlug(p, g, s)
+			}
 		default:
 			if to, ok := ruleCopies[k]; ok {
 				set(to, v)
@@ -764,6 +777,33 @@ func groupOf(it item) string {
 	v, _ := it.body.get("group")
 	s, _ := v.(string)
 	return s
+}
+
+// groupSlug records Renovate's groupSlug of group g, reported at path p. The first value of a
+// group wins, as Renovate's branch for its first rule does; a later rule setting another one
+// is dropped with a warning, since deps' group has one branch.
+func (t *translator) groupSlug(p, g, slug string) {
+	if v, ok := t.slugs.get(g); ok {
+		if v != slug {
+			t.n.warn(p, "group %q already uses the branch topic %q; %q dropped", g, v, slug)
+		}
+		return
+	}
+	t.slugs.set(g, slug)
+}
+
+// mergeSlugs adds the group slugs to the groups mapping, each as the first key of its group's
+// entry.
+func mergeSlugs(groups, slugs omap) omap {
+	for _, f := range slugs {
+		entry := omap{{"slug", f.v}}
+		if v, ok := groups.get(f.k); ok {
+			entry = append(entry, v.(omap)...)
+			groups = slices.DeleteFunc(groups, func(g field) bool { return g.k == f.k })
+		}
+		groups.set(f.k, entry)
+	}
+	return groups
 }
 
 // hoistGroupSettings moves the settings the rules of a group share into groups.<group>: a key

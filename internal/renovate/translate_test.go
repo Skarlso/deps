@@ -126,14 +126,6 @@ func TestLoadRules(t *testing.T) {
     group: GitHub Actions` + defaultExclusions,
 		},
 		{
-			name: "groupSlug keeps Renovate's branch topic",
-			src:  `{packageRules: [{matchManagers: ['npm'], groupName: 'npm dependencies', groupSlug: 'npm-deps'}]}`,
-			rules: `  - # packageRules[0]
-    managers: [npm]
-    group: npm dependencies
-    groupSlug: npm-deps` + defaultExclusions,
-		},
-		{
 			name: "additionalBranchPrefix with supported templates; others dropped",
 			src:  `{packageRules: [{matchPackageNames: ['a'], additionalBranchPrefix: '{{{parentDir}}}-'}, {matchPackageNames: ['b'], additionalBranchPrefix: '{{depName}}-', automerge: true}]}`,
 			rules: `  - # packageRules[0]

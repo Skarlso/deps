@@ -602,9 +602,6 @@ func (c *Config) policy(d dep.Dep, kind dep.UpdateType, age time.Duration) Polic
 		if r.Group != "" {
 			p.Group = r.Group
 		}
-		if r.GroupSlug != "" {
-			p.GroupSlug = r.GroupSlug
-		}
 		if r.SecurityGroup != "" {
 			p.SecurityGroup = r.SecurityGroup
 		}
@@ -635,6 +632,7 @@ func (c *Config) policy(d dep.Dep, kind dep.UpdateType, age time.Duration) Polic
 	// rule settings (dep.Update, engine applyPolicy).
 	if g := c.Groups[p.Group]; g != nil && p.Group != "" {
 		p.apply(&g.Settings)
+		p.GroupSlug = g.Slug
 		p.GroupSettings = true
 	}
 	return p

@@ -32,7 +32,7 @@ Renovate's options and their `.deps.yaml` equivalents. `deps migrate`, `deps ini
 | `extractVersion` | `rules[].extractVersion`, marker `extractVersion=` (RE2 with a `version` group, same syntax) |
 | `replacementName`, `replacementVersion` | same names in `rules`; `replacementNameTemplate` only in the prefix form `{{{replace '<prefix>' '<new prefix>' packageName}}}`, which becomes `rules[].replacementPrefix` and `replacementName` |
 | `groupName` | `rules[].group`; settings shared by the group's rules can go into `groups.<name>` once |
-| `groupSlug` | `rules[].groupSlug`: the branch topic of the group's PR (`<branchPrefix>group/<slug>`), as in Renovate; without it the group name is slugified. It renames the branch only, the group still batches by `group` |
+| `groupSlug` | `groups.<name>.slug`: the branch topic of the group's PR (`<branchPrefix>group/<slug>`), as in Renovate; without it the group name is slugified. It renames the branch only, the group still batches by `group`. The slug belongs to the group, so a rule's `groupSlug` moves into the group's entry and two rules of one group must agree |
 | `schedule` | `schedule` / `rules[].schedule`: Renovate's time windows as written (`before 6am on monday`, `every weekend`, `after 10pm and before 5am every weekday`, `on the first day of the month`, crons with minute `*` like `* 0-5 * * 1`), evaluated against the run time; or crons of the workflow's `on.schedule` triggers (see [behavior differences](../renovate-differences.md#behavior-differences)) |
 | `timezone` | `timezone` (IANA name; applies to time windows, not to cron triggers) |
 | `updateNotScheduled` | `updateNotScheduled` |
