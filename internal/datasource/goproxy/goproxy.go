@@ -142,6 +142,9 @@ func pathPrefixes(pkg string) []string {
 // whose first entry is `direct`. A package path of five elements otherwise starts five go
 // commands, each of which fetches from the module's repository. A path the run does not
 // answer, an unreadable go environment and a failing run are left to the per-path lookup.
+// The request slot is the run's alone: sharing waits for the lookup of each path, and one of
+// those can hold its path's resolution while waiting for a slot itself (see direct), which
+// with a single slot (`--concurrency 1`) would be this one.
 func (s *Source) prime(ctx context.Context, paths []string, dir string) {
 	env, err := s.loadEnv(ctx)
 	if err != nil {
@@ -160,8 +163,8 @@ func (s *Source) prime(ctx context.Context, paths []string, dir string) {
 	if err != nil {
 		return
 	}
-	defer release()
 	res, err := s.list(ctx, dir, batch...)
+	release()
 	if err != nil {
 		return
 	}

@@ -21,6 +21,7 @@ import (
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/datasource"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/dep"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/gotool"
+	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/httpx"
 )
 
 // proxyServer serves "/<name>/<module>/@v/list": "ok" proxies answer with a list, "nf" with 404,
@@ -325,6 +326,62 @@ func TestReleasesPackagePathOneGoList(t *testing.T) {
 				t.Errorf("go list runs = %q, want %q", runs, tt.wantRuns)
 			}
 		})
+	}
+}
+
+// prime must release its request slot before it shares the run's answers: sharing waits for
+// the lookup of each batched path, and a lookup that is already running holds its path's
+// resolution while waiting for a slot of its own (see direct). With one slot (`--concurrency 1`)
+// that slot is prime's, so both would wait forever.
+func TestPrimeSharesAnswersWithoutHoldingASlot(t *testing.T) {
+	const shared = "private.example/tools"
+	sem := make(chan struct{}, 1)
+	s := New(nil, sem)
+	s.env = func(context.Context) (gotool.GoEnv, error) {
+		return gotool.GoEnv{Proxy: "https://proxy.test", NoProxy: "private.example"}, nil
+	}
+	listing, resume := make(chan struct{}), make(chan struct{})
+	s.list = func(_ context.Context, _ string, mods ...string) (map[string]gotool.ModuleVersions, error) {
+		if len(mods) > 1 { // prime's batched run, holding the slot
+			close(listing)
+			<-resume
+		}
+		res := make(map[string]gotool.ModuleVersions, len(mods))
+		for _, m := range mods {
+			res[m] = gotool.ModuleVersions{Versions: []string{"v1.0.0"}}
+		}
+		return res, nil
+	}
+
+	ctx := t.Context()
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.Releases(ctx, dep.Dep{Manager: "mise", Name: shared + "/v2/cmd/lint"}, ".")
+		done <- err
+	}()
+	<-listing
+	held := make(chan struct{})
+	go func() { // the lookup of one batched path, holding its resolution and waiting for a slot
+		_, _ = s.entry(ctx, shared, ".", func() ([]string, bool, error) {
+			close(held)
+			release, err := httpx.Acquire(ctx, sem)
+			if err != nil {
+				return nil, false, err
+			}
+			defer release()
+			return []string{"v1.0.0"}, false, nil
+		})
+	}()
+	<-held
+	close(resume)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Releases = %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("prime shared the run's answers while holding the only request slot")
 	}
 }
 
