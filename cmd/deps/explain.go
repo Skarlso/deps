@@ -378,6 +378,16 @@ func describeRuleValue(k string, v reflect.Value) (string, bool) {
 			return "", false
 		}
 		return "'" + v.String() + "'", true
+	case "group":
+		// A group name reads like the other names; group: '' clears the group of an earlier
+		// rule, which is shown as the empty name it is.
+		if v.IsNil() {
+			return "", false
+		}
+		if s := v.Elem().String(); s != "" {
+			return s, true
+		}
+		return `""`, true
 	}
 	switch val := v.Interface().(type) {
 	case string:

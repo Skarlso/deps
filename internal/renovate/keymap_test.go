@@ -46,7 +46,7 @@ func TestKeyMapping(t *testing.T) {
 			t.Errorf("%s is copied through config.RenovateOptions and translated by hand", k)
 		}
 	}
-	for _, k := range []string{"groupName", "allowedVersions", "dependencyDashboardApproval", "draftPR"} {
+	for _, k := range []string{"allowedVersions", "dependencyDashboardApproval", "draftPR"} {
 		if _, ok := ruleCopies[k]; !ok {
 			t.Errorf("ruleCopies lacks %s", k)
 		}

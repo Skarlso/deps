@@ -158,7 +158,7 @@ groups:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c.Rules) != 1 || c.Rules[0].Group != "go" {
+	if len(c.Rules) != 1 || c.Rules[0].GroupName() != "go" {
 		t.Errorf("rules = %+v, want the extended file's", c.Rules)
 	}
 	if len(c.Custom) != 1 || len(c.Custom[0].Files) != 1 || c.Custom[0].Files[0] != "Makefile" {
@@ -191,7 +191,7 @@ func TestLoadExtendsDefaultsAndDiamond(t *testing.T) {
 	}
 	var groups []string
 	for _, r := range c.Rules {
-		groups = append(groups, r.Group)
+		groups = append(groups, r.GroupName())
 	}
 	if !slices.Equal(groups, []string{"common", "a", "b"}) {
 		t.Errorf("groups = %v", groups)
@@ -369,7 +369,7 @@ func TestGitFetcher(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, err := Load(t.Context(), dir, "", &GitFetcher{})
-	if err != nil || len(c.Rules) != 1 || c.Rules[0].Group != "go" || c.Rules[0].source != u+"//presets/go.yaml#v1" {
+	if err != nil || len(c.Rules) != 1 || c.Rules[0].GroupName() != "go" || c.Rules[0].source != u+"//presets/go.yaml#v1" {
 		t.Fatalf("Load = %+v, %v", c, err)
 	}
 }
@@ -553,7 +553,7 @@ func TestLoadExtendsSeveralRepos(t *testing.T) {
 	}
 	var groups []string
 	for i := range c.Rules {
-		groups = append(groups, c.Rules[i].Group)
+		groups = append(groups, c.Rules[i].GroupName())
 	}
 	if want := []string{"g0", "g1", "g2"}; !slices.Equal(groups, want) {
 		t.Errorf("rule groups = %q, want %q", groups, want)

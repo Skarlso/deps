@@ -130,7 +130,7 @@ func TestMergeBase(t *testing.T) {
 	}
 	var groups, sources []string
 	for i := range m.Rules {
-		groups = append(groups, m.Rules[i].Group)
+		groups = append(groups, m.Rules[i].GroupName())
 		file, line := m.Rules[i].Source()
 		sources = append(sources, fmt.Sprintf("%s:%d", file, line))
 	}
@@ -171,7 +171,7 @@ func TestMergeBaseSharedExtends(t *testing.T) {
 	}
 	var groups []string
 	for i := range m.Rules {
-		groups = append(groups, m.Rules[i].Group)
+		groups = append(groups, m.Rules[i].GroupName())
 	}
 	if want := []string{"shared", "checkout", "release"}; !slices.Equal(groups, want) {
 		t.Errorf("rule groups = %q, want %q", groups, want)
@@ -182,7 +182,7 @@ func TestMergeBaseSharedExtends(t *testing.T) {
 	if len(f.calls) != 0 {
 		t.Errorf("fetches during MergeBase = %q, want none: the checkout's chain already read the file", f.calls)
 	}
-	if got, want := m.Rules[0].Group, "shared"; got != want {
+	if got, want := m.Rules[0].GroupName(), "shared"; got != want {
 		t.Errorf("rules[0].group = %q, want %q", got, want)
 	}
 	file, _ := m.Rules[0].Source()

@@ -209,7 +209,7 @@ func TestWriteTrace(t *testing.T) {
 		{MinimumReleaseAge: "28 days", MinimumReleaseAgeBehaviour: config.TimestampRequired},
 		{Allow: `/^\d+\.\d+$/`, Versioning: "loose", Separate: config.SeparateMajors},
 		{RangeStrategy: config.RangeUpdateLockfile},
-		{Names: []string{"x*", "!xy"}, CurrentVersion: "< 2", CurrentAge: "> 1 year", Group: "stale"},
+		{Names: []string{"x*", "!xy"}, CurrentVersion: "< 2", CurrentAge: "> 1 year", Group: new("stale")},
 		{Paths: []string{"!test/**"}, CurrentAge: "< 30 days", Ignore: &yes},
 	}}
 	d := dep.Dep{Manager: "custom", DepType: "regex", Datasource: "docker", Versioning: "docker", File: "Dockerfile", Line: 1, Name: "golang", Version: "1.24-alpine"}

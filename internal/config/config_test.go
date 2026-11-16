@@ -345,7 +345,7 @@ func TestLoadAnchors(t *testing.T) {
 		t.Fatalf("c = %v, err = %v", c, err)
 	}
 	c, err = load(t, ".deps.yaml", "rules:\n  - &base {group: g}\n  - <<: *base\n    names: [a]\n")
-	if err != nil || len(c.Rules) != 2 || c.Rules[1].Group != "g" {
+	if err != nil || len(c.Rules) != 2 || c.Rules[1].GroupName() != "g" {
 		t.Fatalf("merge key: c = %+v, err = %v", c, err)
 	}
 	_, err = load(t, ".deps.yaml", "rules:\n  - &base {group: g}\n  - <<: *base\n    nmes: [a]\n")

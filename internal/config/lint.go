@@ -87,7 +87,7 @@ func (c *Config) lintGroups() []Warning {
 	var ws []Warning
 	for _, name := range slices.Sorted(maps.Keys(c.Groups)) {
 		builtin := BuiltinGroup(name)
-		if name == "" || (builtin && c.MonoreposEnabled()) || slices.ContainsFunc(c.Rules, func(r Rule) bool { return r.Group == name }) {
+		if name == "" || (builtin && c.MonoreposEnabled()) || slices.ContainsFunc(c.Rules, func(r Rule) bool { return r.GroupName() == name }) {
 			continue
 		}
 		msg := fmt.Sprintf("no rule sets group %q, so its settings apply to nothing", name)

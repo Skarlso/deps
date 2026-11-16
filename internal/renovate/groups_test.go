@@ -184,6 +184,23 @@ func TestHoistGroupSettings(t *testing.T) {
 `,
 		},
 		{
+			name: "a later rule taking the group's deps out of it blocks",
+			rules: `
+- {names: ['a/**'], group: a, schedule: ['0 5 * * 1']}
+- {names: ['a/x/**'], group: a, schedule: ['0 5 * * 1']}
+- {names: ['a/y'], group: ''}`,
+		},
+		{
+			name: "a later rule taking them out but setting the key itself does not",
+			rules: `
+- {names: ['a/**'], group: a, schedule: ['0 5 * * 1']}
+- {names: ['a/x/**'], group: a, schedule: ['0 5 * * 1']}
+- {names: ['a/y'], group: '', schedule: ['0 6 * * 1']}`,
+			want: `a:
+  schedule: [0 5 * * 1]
+`,
+		},
+		{
 			name: "a later group without the key that can take the group's deps blocks",
 			rules: `
 - {managers: [docker], updateTypes: [digest, pin], group: d, schedule: ['0 5 * * 1']}

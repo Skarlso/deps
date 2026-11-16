@@ -659,7 +659,7 @@ type Rule struct {
 	ReplacementName    string   `yaml:"replacementName" jsonschema_description:"Replace matching deps with this package (image, npm package, owner/repo[/path] action, Go module path, group:artifact, chart or registry address; with replacementPrefix, the new prefix) in one replacement update instead of their usual updates, which run proposes once the replacement's PR is closed. The version is kept unless replacementVersion is set, and the new package must have it (else the dep is skipped with the reason). Supported by the docker, gitlabci, kustomize, helm, terraform (providers, registry modules, images), terragrunt, tflint, maven, gradle, npm, github-actions and gomod managers where the name is written literally (see the managers reference). Overrides earlier rules and the built-in replacements. updates lists do not apply to replacements; select them with updateTypes: [replacement]. Cannot be combined with updateTypes or currentAge."`
 	ReplacementVersion string   `yaml:"replacementVersion" jsonschema_description:"Version written with replacementName (the new package's version; an npm range keeps its operator); empty keeps the current version. Requires replacementName."`
 	ReplacementPrefix  string   `yaml:"replacementPrefix" jsonschema_description:"Prefix of the dep name that replacementName replaces, for moves of many names at once (Renovate's replacementNameTemplate with replace): with replacementPrefix: k8s.gcr.io/ and replacementName: registry.k8s.io/, k8s.gcr.io/pause becomes registry.k8s.io/pause. Deps whose name does not start with it get no replacement from the rule. Requires replacementName."`
-	Group              string   `yaml:"group" jsonschema_description:"Group name: all deps with the same group share one PR."`
+	Group              *string  `yaml:"group" jsonschema_description:"Group name: all deps with the same group share one PR. The empty string clears the group an earlier rule set, so matching deps get their own PRs again (Renovate's groupName: null)."`
 	SecurityGroup      string   `yaml:"securityGroup" jsonschema_description:"Group name for the security updates of matching deps: those with the same securityGroup share one PR on <prefix>group/<slug>-security, apart from non-security updates (also of a group with the same name). Without it every security update gets its own PR."`
 	CommitType         string   `yaml:"commitType" jsonschema_description:"Conventional commit type of commit and PR titles; default fix for production deps (gomod direct, npm, cargo, poetry, pub and bundler dependencies, composer require, pep621 project.dependencies, pipenv packages, elm direct and dependencies, julia deps, mix prod, gleam dependencies), chore otherwise. Security updates always use fix."`
 	CommitScope        *string  `yaml:"commitScope" jsonschema_description:"Conventional commit scope; default deps, empty string means no scope ('chore: ...')."`
@@ -681,6 +681,15 @@ type Rule struct {
 	// managerBits and depTypeBits are the match filters of Managers and DepTypes (matchBits),
 	// 0 when the field is unset; matchesDep rejects a dep without a common bit.
 	managerBits, depTypeBits uint64
+}
+
+// GroupName returns the group the rule gives matching deps: "" when it sets none, and also
+// "" when it clears the group of an earlier rule (an empty group, Rule.Group pointing at "").
+func (r *Rule) GroupName() string {
+	if r.Group == nil {
+		return ""
+	}
+	return *r.Group
 }
 
 // Source returns the file a loaded rule is written in (the config file's path relative to

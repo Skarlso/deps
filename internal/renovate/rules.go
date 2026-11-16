@@ -646,6 +646,11 @@ func (t *translator) effects(origin string, r map[string]any) map[string]effect 
 				v = ""
 			}
 			set("commitScope", v)
+		case "groupName":
+			if v == nil {
+				v = "" // null ungroups the deps an earlier rule grouped
+			}
+			set("group", v)
 		case "groupSlug":
 			// The branch topic belongs to the group, not to the rule: it becomes
 			// groups.<groupName>.slug.
@@ -770,11 +775,19 @@ func (m omap) get(k string) (any, bool) {
 	return nil, false
 }
 
-// groupOf returns the group a translated rule sets, "" for none.
+// groupOf returns the group a translated rule sets, "" for none and for one clearing the
+// group of an earlier rule (clearsGroup).
 func groupOf(it item) string {
 	v, _ := it.body.get("group")
 	s, _ := v.(string)
 	return s
+}
+
+// clearsGroup reports whether a translated rule takes its deps out of the group an earlier
+// rule gave them (Renovate's groupName: null, translated to an empty group name).
+func clearsGroup(it item) bool {
+	v, ok := it.body.get("group")
+	return ok && v == ""
 }
 
 // groupSlug records Renovate's groupSlug of group g, reported at path p. The first value of a
@@ -893,8 +906,9 @@ func sharedValue(rules []item, g, k string) (any, bool) {
 // group g got it from a rule of g, which set v: it keeps v unless a later rule matching it
 // sets k to another value (or adds labels), which groups.<g> would now override. A dep a rule
 // of g matched keeps its value unless a later rule moves it to a group that does not move k
-// and does not set it itself, as groups.<g> no longer applies to it. Rules that cannot match
-// the same dep as an earlier rule of g (disjoint) do neither.
+// and does not set it itself, or takes it out of every group (clearsGroup), as groups.<g> no
+// longer applies to it. Rules that cannot match the same dep as an earlier rule of g
+// (disjoint) do neither.
 func hoistable(rules []item, g, k string, v any, shared map[string]any) bool {
 	for j, it := range rules {
 		w, sets := it.body.get(k)
@@ -902,8 +916,8 @@ func hoistable(rules []item, g, k string, v any, shared map[string]any) bool {
 		switch h := groupOf(it); {
 		case h == g:
 			continue
-		case h != "":
-			_, moves := shared[h]
+		case h != "", clearsGroup(it):
+			_, moves := shared[h] // never for a cleared group: shared has no entry ""
 			conflict = !moves && !sets
 		default:
 			_, adds := it.body.get("addLabels")

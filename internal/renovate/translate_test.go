@@ -13,6 +13,7 @@ import (
 	"go.yaml.in/yaml/v4"
 
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/config"
+	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/dep"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/pattern"
 )
 
@@ -768,6 +769,33 @@ func TestLoadRules(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestLoadGroupNameNull: a later packageRule with groupName: null takes its deps out of the
+// group an earlier rule gave them. Renovate merges each matching rule over the config
+// (mergeChildConfig spreads the rule, so null wins) and only groups a truthy groupName
+// (branch-name.ts), so the translated rule must clear the group instead of leaving it.
+func TestLoadGroupNameNull(t *testing.T) {
+	res, err := load(t, `{"packageRules":[{"matchPackageNames":["*"],"groupName":"all"},{"matchPackageNames":["foo"],"groupName":null}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := section(t, res, "rules"), "    group: \"\"\n"; !strings.Contains(got, want) {
+		t.Errorf("rules:\n%s\nwant a rule with %s", got, want)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".deps.yaml"), res.YAML, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(t.Context(), dir, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"foo": "", "bar": "all"} {
+		if got := cfg.Policy(dep.Dep{Manager: "gomod", Name: name}).Group; got != want {
+			t.Errorf("%s: group %q, want %q", name, got, want)
+		}
 	}
 }
 

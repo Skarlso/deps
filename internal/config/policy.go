@@ -602,8 +602,8 @@ func (c *Config) policy(d dep.Dep, kind dep.UpdateType, age time.Duration) Polic
 		if r.AllowedUpdateTypes != nil {
 			p.AllowedUpdateTypes = r.allowedUpdateTypes
 		}
-		if r.Group != "" {
-			p.Group = r.Group
+		if r.Group != nil {
+			p.Group = *r.Group
 		}
 		if r.SecurityGroup != "" {
 			p.SecurityGroup = r.SecurityGroup

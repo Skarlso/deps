@@ -77,6 +77,34 @@ groups:
 	}
 }
 
+// A later rule setting an empty group takes its deps out of the group an earlier rule gave
+// them, so they get their own PRs again (Renovate's groupName: null).
+func TestGroupCleared(t *testing.T) {
+	c, err := load(t, ".deps.yaml", `rules:
+  - names: ['**']
+    group: all
+  - names: [foo]
+    group: ''
+groups:
+  all: {automerge: true}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"foo": "", "bar": "all"} {
+		if got := c.Policy(dep.Dep{Manager: "gomod", Name: name}).Group; got != want {
+			t.Errorf("%s: group %q, want %q", name, got, want)
+		}
+	}
+	// The group's settings follow the group, so a cleared dep keeps the top-level ones.
+	if p := c.Policy(dep.Dep{Manager: "gomod", Name: "foo"}); p.Automerge || p.GroupSettings {
+		t.Errorf("foo: automerge = %v, groupSettings = %v, want the top-level settings", p.Automerge, p.GroupSettings)
+	}
+	if got := c.Lint(); len(got) > 0 {
+		t.Errorf("Lint() = %v, want none: a rule still sets group all", got)
+	}
+}
+
 func TestGroupSettingsLint(t *testing.T) {
 	c, err := load(t, ".deps.yaml", `rules:
   - {managers: [gomod], group: go, securityGroup: sec}

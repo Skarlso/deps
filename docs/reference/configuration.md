@@ -1629,7 +1629,7 @@ Prefix of the dep name that replacementName replaces, for moves of many names at
 
 ### `rules[].group`
 
-Group name: all deps with the same group share one PR.
+Group name: all deps with the same group share one PR. The empty string clears the group an earlier rule set, so matching deps get their own PRs again (Renovate's groupName: null).
 
 - **Type:** string
 
