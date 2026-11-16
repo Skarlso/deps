@@ -89,3 +89,29 @@ func TestHelmfileTemplate(t *testing.T) {
 		t.Error("template without .gotmpl parsed")
 	}
 }
+
+// Renovate's helmfile managerFilePatterns are `/(^|/)helmfile\.d/.+\.ya?ml(?:\.gotmpl)?$/`,
+// so releases in subdirectories of helmfile.d are helmfiles too; they used to fall through
+// to the generic manifest path, where their releases are never extracted.
+func TestHelmfileSubdirectory(t *testing.T) {
+	const src = "repositories:\n  - name: jetstack\n    url: https://charts.jetstack.io\n" +
+		"releases:\n  - name: cert-manager\n    chart: jetstack/cert-manager\n    version: v1.14.0\n"
+	for _, p := range []string{
+		"helmfile.d/prod/releases.yaml", "helmfile.d/a/b/releases.yml",
+		"env/helmfile.d/prod/releases.yaml.gotmpl",
+	} {
+		if !isHelmfile(p) {
+			t.Errorf("%s is no helmfile", p)
+		}
+		got, err := New().Extract(p, []byte(src), manager.Env{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkChartDeps(t, src, got, []wantChartDep{
+			{name: "cert-manager", source: "https://charts.jetstack.io", version: "v1.14.0", span: "v1.14.0", line: 7},
+		}, TypeHelmfile)
+	}
+	if isHelmfile("helmfile.d") || isHelmfile("helmfile.d/releases.txt") {
+		t.Error("non-YAML matched")
+	}
+}

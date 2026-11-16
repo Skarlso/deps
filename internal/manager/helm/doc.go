@@ -11,7 +11,7 @@ var Doc = refdoc.Manager{
 	Files: []string{
 		"`Chart.yaml` (DepType `chart`)",
 		"`requirements.y(a)ml` of Helm v2 (`apiVersion: v1`) charts (DepType `requirements`); files without `dependencies` (Ansible Galaxy) yield nothing",
-		"`helmfile.y(a)ml`, `helmfile.d/*.y(a)ml`, each optionally `.gotmpl` (DepType `helmfile`)",
+		"`helmfile.y(a)ml`, any `*.y(a)ml` below a `helmfile.d/` directory (including subdirectories), each optionally `.gotmpl` (DepType `helmfile`)",
 		"other `*.y(a)ml` containing the API group of a k0s, Flux, Argo CD, Sveltos or Fleet resource below, parsed document by document (DepTypes `k0s`, `flux`, `argocd`, `sveltos`, `fleet`)",
 		"`repositories.yaml` in Helm's repository config format (`repositories[]` with `name` and `url`): no deps, it resolves Chart.yaml repository aliases (below)",
 		"`fleet.y(a)ml` Rancher Fleet bundle configs (DepType `fleet`)",

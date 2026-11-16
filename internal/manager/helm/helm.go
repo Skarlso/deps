@@ -39,7 +39,9 @@ const (
 	TypeVendir       = "vendir"
 )
 
-var helmfileRe = regexp.MustCompile(`(^|/)(helmfile\.ya?ml|helmfile\.d/[^/]+\.ya?ml)(\.gotmpl)?$`)
+// helmfileRe is Renovate's helmfile managerFilePatterns: `helmfile.y(a)ml` and any
+// `.y(a)ml` below a `helmfile.d` directory, each optionally templated (`.gotmpl`).
+var helmfileRe = regexp.MustCompile(`(^|/)(helmfile\.ya?ml|helmfile\.d/.+\.ya?ml)(\.gotmpl)?$`)
 
 type helmManager struct {
 	links links
