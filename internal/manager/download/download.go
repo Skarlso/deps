@@ -91,12 +91,7 @@ func Follow(d dep.Dep, depType, value string, off, line int) (dep.Dep, bool) {
 			from = i + 3 + j
 		}
 	}
-	var spans []int
-	for _, at := range occurrences(value, d.Version, from) {
-		if at == 0 || !isDigit(value[at-1]) && value[at-1] != '.' {
-			spans = append(spans, at)
-		}
-	}
+	spans := occurrences(value, d.Version, from)
 	if len(spans) == 0 || len(spans) > 3 {
 		return dep.Dep{}, false
 	}
@@ -195,8 +190,9 @@ func versionStart(tag string) int {
 
 func isSep(c byte) bool { return c == '-' || c == '_' }
 
-// occurrences are the offsets in u, from the first at from, of v not followed by more
-// version (a digit, or a dot and a digit).
+// occurrences are the offsets in u, from the first at from, of v not inside a longer version:
+// neither preceded (a digit or a dot) nor followed (a digit, or a dot and a digit) by more of
+// one, so `1.2` of `r-21.2-linux.tar.gz` is not one.
 func occurrences(u, v string, from int) []int {
 	var out []int
 	for i := from; ; {
@@ -206,7 +202,8 @@ func occurrences(u, v string, from int) []int {
 		}
 		i += j
 		end := i + len(v)
-		if !(end < len(u) && isDigit(u[end])) && !(end+1 < len(u) && u[end] == '.' && isDigit(u[end+1])) {
+		if (i == 0 || !isDigit(u[i-1]) && u[i-1] != '.') &&
+			!(end < len(u) && isDigit(u[end])) && !(end+1 < len(u) && u[end] == '.' && isDigit(u[end+1])) {
 			out = append(out, i)
 		}
 		i = end

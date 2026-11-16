@@ -20,6 +20,9 @@ func TestLocate(t *testing.T) {
 		{"https://codeberg.org/a/b/releases/download/v1.2.3/b-1.2.3.tgz", forge.ForgejoReleases, "a/b", "https://codeberg.org", "1.2.3", `^v(?<version>\d.*)$`, "https://codeberg.org/a/b/releases/download/v{{version}}/b-{{version}}.tgz", 2},
 		{"https://gitlab.com/g/sub/p/-/archive/v2.0.0/p-v2.0.0.tar.bz2", "git-tags", "g/sub/p", "https://gitlab.com/g/sub/p", "2.0.0", `^v(?<version>\d.*)$`, "https://gitlab.com/g/sub/p/-/archive/v{{version}}/p-v{{version}}.tar.bz2", 2},
 		{"https://registry.npmjs.org/@scope/pkg/-/pkg-3.1.0.tgz", "npm", "@scope/pkg", "", "3.1.0", "", "https://registry.npmjs.org/@scope/pkg/-/pkg-{{version}}.tgz", 1},
+		// the `1.2` inside `21.2` is not an occurrence of the version: only the tag is a span
+		// and the artifact template keeps the literal number.
+		{"https://github.com/o/r/releases/download/v1.2/r-21.2-linux.tar.gz", "github-releases", "o/r", "https://github.com/o/r", "1.2", `^v(?<version>\d.*)$`, "https://github.com/o/r/releases/download/v{{version}}/r-21.2-linux.tar.gz", 1},
 	} {
 		var d dep.Dep
 		if !Locate(&d, tc.url, 10, env) {
