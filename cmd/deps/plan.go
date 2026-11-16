@@ -368,6 +368,11 @@ func report(w io.Writer, t terminal, showSkipped bool, res *engine.Result, errs 
 	if t.tty {
 		updates = nil
 	}
+	// The update lines are a collapsible group: a large repository has hundreds of them,
+	// and the summary below lists the same updates per PR.
+	if len(updates) > 0 {
+		actionsLog.group(plural(len(updates), "update", "updates"))
+	}
 	for i, u := range updates {
 		from, to := u.FromTo()
 		sec := ""
@@ -393,6 +398,9 @@ func report(w io.Writer, t terminal, showSkipped bool, res *engine.Result, errs 
 			continue
 		}
 		fmt.Fprintf(w, "update  %s:%d  %s  %s -> %s  (%s%s)%s\n", u.Dep.File, u.Dep.Line, u.Dep.Name, from, to, u.Type, hint, sec)
+	}
+	if len(updates) > 0 {
+		actionsLog.endGroup()
 	}
 	if showSkipped && len(res.Skipped) > 0 {
 		actionsLog.group(plural(len(res.Skipped), "skipped dependency", "skipped dependencies"))

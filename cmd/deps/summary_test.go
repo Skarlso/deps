@@ -207,6 +207,27 @@ func TestSummaryRender(t *testing.T) {
 	}
 }
 
+// With the actions format the held-back releases and the deprecated or abandoned deps of the
+// text summary are collapsible groups of their own, like the PR list.
+func TestSummaryTextActionsGroups(t *testing.T) {
+	res := summaryFixture()
+	var buf bytes.Buffer
+	actionsLog = &annotator{on: true, w: &buf}
+	t.Cleanup(func() { actionsLog = &annotator{} })
+	s := summary{Command: "plan", Res: res, Groups: engine.GroupUpdates(res.Updates, ""), ShowSkipped: true}
+	s.writeText(&buf)
+	for _, want := range []string{
+		"::group::3 pull requests with their updates\n  PR deps/actions-checkout-major",
+		"::endgroup::\n::group::1 release held back by minimumReleaseAge\n  Held back by minimumReleaseAge:\n",
+		"::endgroup::\n::group::1 deprecated or abandoned dependency\n  Deprecated or abandoned:\n",
+		"::endgroup::\n  Skipped (--show-skipped lists each dependency):\n",
+	} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("text lacks %q:\n%s", want, buf.String())
+		}
+	}
+}
+
 func TestMarkdownTableCellsEscaped(t *testing.T) {
 	react := dep.Dep{Manager: "npm", File: "a|b/package.json", Line: 3, Name: "react", Version: "^1 || ^2", Range: "^1 || ^2"}
 	u := dep.Update{Dep: react, Type: dep.Pin, NewVersion: "2.0.0"}

@@ -413,6 +413,11 @@ func (s *summary) writeText(w io.Writer) {
 	}
 	st := s.Style
 	fmt.Fprintf(w, "\n%s %s\n", st.Paint(logx.Bold, "Summary:"), s.headline(st))
+	// Each long list of the summary is a collapsible group: the headline above them stays
+	// visible, the lists are opened on demand.
+	if len(s.Groups) > 0 {
+		actionsLog.group(plural(len(s.Groups), "pull request", "pull requests") + " with their updates")
+	}
 	for _, g := range s.Groups {
 		notes := s.textNotes(g)
 		fmt.Fprintf(w, "  PR %s  %s", st.Paint(logx.Accent, g.Branch), g.Title)
@@ -429,23 +434,30 @@ func (s *summary) writeText(w io.Writer) {
 			fmt.Fprintf(w, "      %s  %s  %s -> %s  (%s)\n", u.Dep.Name, st.Paint(logx.Dim, u.Dep.File+":"+strconv.Itoa(u.Dep.Line)), from, to, updateType(u, st))
 		}
 	}
+	if len(s.Groups) > 0 {
+		actionsLog.endGroup()
+	}
 	switch {
 	case len(s.Res.Pending) > 0 && !s.ShowSkipped:
 		fmt.Fprintf(w, "  Held back by minimumReleaseAge: %d (--show-skipped lists each)\n", len(s.Res.Pending))
 	case len(s.Res.Pending) > 0:
+		actionsLog.group(plural(len(s.Res.Pending), "release held back by minimumReleaseAge", "releases held back by minimumReleaseAge"))
 		fmt.Fprintln(w, "  Held back by minimumReleaseAge:")
 		for _, p := range s.Res.Pending {
 			fmt.Fprintf(w, "      %s  %s:%d  %s  %s\n", p.Dep.Name, p.Dep.File, p.Dep.Line, p.Version, p.Reason)
 		}
+		actionsLog.endGroup()
 	}
 	switch {
 	case len(s.Res.Warnings) > 0 && !s.ShowSkipped:
 		fmt.Fprintf(w, "  Deprecated or abandoned: %d (--show-skipped lists each)\n", len(s.Res.Warnings))
 	case len(s.Res.Warnings) > 0:
+		actionsLog.group(plural(len(s.Res.Warnings), "deprecated or abandoned dependency", "deprecated or abandoned dependencies"))
 		fmt.Fprintln(w, "  Deprecated or abandoned:")
 		for _, d := range s.Res.Warnings {
 			fmt.Fprintf(w, "      %s  %s:%d  %s: %s\n", d.Dep.Name, d.Dep.File, d.Dep.Line, d.Kind, d.Reason)
 		}
+		actionsLog.endGroup()
 	}
 	if len(s.RateLimited) > 0 {
 		fmt.Fprintf(w, "  Rate limited: %s (%s)\n", plural(len(s.RateLimited), "lookup", "lookups"), rateLimitHint)

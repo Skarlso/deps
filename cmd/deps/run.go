@@ -434,12 +434,30 @@ func runRepo(ctx context.Context, cmd *cli.Command, o *rootOpts, r *runOpts, sh 
 	}
 	actions, botErrs := bot.Run(ctx, bo, botBases, postProcessors(s), pc)
 
+	// The pr lines go into one collapsible group (a run can have dozens); the dashboard
+	// line stays outside it, it is one line and names the dashboard issue.
+	var dashboards []bot.Action
+	prs := 0
+	for _, a := range actions {
+		if !a.Dashboard {
+			prs++
+		}
+	}
+	if prs > 0 {
+		actionsLog.group(plural(prs, "pull request", "pull requests"))
+	}
 	for _, a := range actions {
 		if a.Dashboard {
-			fmt.Fprintf(stderr, "dashboard %s  %s  %s\n", a.Status, a.Title, a.URL)
+			dashboards = append(dashboards, a)
 			continue
 		}
 		fmt.Fprintf(stderr, "pr      %s  %s  %s  %s\n", a.Display(), a.Branch, a.Title, a.URL)
+	}
+	if prs > 0 {
+		actionsLog.endGroup()
+	}
+	for _, a := range dashboards {
+		fmt.Fprintf(stderr, "dashboard %s  %s  %s\n", a.Status, a.Title, a.URL)
 	}
 	n := countActions(actions)
 	for _, e := range botErrs {

@@ -65,6 +65,35 @@ func TestAnnotationsConfig(t *testing.T) {
 	}
 }
 
+// The long result lists of a run are collapsible groups: the update lines, the pr lines and
+// the lists of the text summary. The dashboard line stays outside the pr group.
+func TestAnnotationsResultGroups(t *testing.T) {
+	cleanEnv(t)
+	newFakeNet(t)
+	giteaEnv(t)
+	_, work := gitRepo(t, map[string]string{".github/workflows/ci.yml": workflow, ".deps.yaml": "dashboard:\n  enabled: true\n"})
+	githubActions(t, work)
+	_, stderr, code := execute(t, "run", "--dir", work, "--dry-run")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, stderr)
+	}
+	for _, want := range []string{
+		"::group::2 updates\nupdate  .github/workflows/ci.yml:6  actions/checkout  ",
+		"::group::1 pull request\npr      would-create  ",
+		"::group::1 pull request with their updates\n  PR ",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, stderr)
+		}
+	}
+	if n := strings.Count(stderr, "::group::"); n != strings.Count(stderr, "::endgroup::") {
+		t.Errorf("%d groups, %d ends:\n%s", n, strings.Count(stderr, "::endgroup::"), stderr)
+	}
+	if !strings.Contains(stderr, "::endgroup::\ndashboard would-create  ") {
+		t.Errorf("dashboard line not outside the pr group:\n%s", stderr)
+	}
+}
+
 func TestAnnotationsConfigWarnings(t *testing.T) {
 	cleanEnv(t)
 	newFakeNet(t)
