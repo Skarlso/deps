@@ -318,6 +318,7 @@ One directory walk, lookups deduplicated and shared across dependencies, commits
 
 ## Docs
 
+- [Everyday tasks](docs/guides.md): recipes for the regular work — see what is outdated, update one dependency, find out why one is not updated, hold a major back, take only security fixes, group PRs, pin digests, refresh lockfiles, audit many repositories.
 - [Running deps in CI](docs/ci.md): tokens and permissions, GitHub, Gitea, Forgejo and GitLab CI, schedules, automerge, dashboard, base branches, signed commits, self-hosted runners, troubleshooting.
 - [Install and verify](docs/install.md): packages, the static binary, `go install`, verifying a download, running deps locally.
 - [Migrating from Renovate](docs/migrating-from-renovate.md): the five migration steps, what cannot be translated, behavior differences; a complete translated config in the [open-component-model example](docs/examples-ocm.md).

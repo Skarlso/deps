@@ -9,7 +9,7 @@ deps behaves the same locally and in CI. In CI it detects the forge from the job
 3. **Set the schedule.** The workflow's `on.schedule` cron decides when deps runs. The examples also run [on push to the default branch](#run-on-push-to-the-default-branch), so open PRs are rebased right after a merge. To open some PRs only on certain crons, see [Schedules](#schedules).
 4. **Optional: add a `.deps.yaml`.** Without one, every direct dependency is updated. Rules, groups and limits are in the [configuration reference](reference/configuration.md). To check the config on pull requests, see [Preview on pull requests](#preview-on-pull-requests).
 
-Then, as needed: [automerge](#automerge), the [dependency dashboard](#dependency-dashboard), [signed commits](#signed-commits), [self-hosted runners](#self-hosted-runners-and-actions-hosts), and [troubleshooting](#troubleshooting).
+Then, as needed: [automerge](#automerge), the [dependency dashboard](#dependency-dashboard), [signed commits](#signed-commits), [self-hosted runners](#self-hosted-runners-and-actions-hosts), and [troubleshooting](#troubleshooting). The day-to-day tasks once it runs — ignoring a dependency, holding a major back, grouping PRs, unsticking a PR — are in [Everyday tasks](guides.md).
 
 ## Contents
 
