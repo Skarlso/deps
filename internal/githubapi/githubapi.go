@@ -154,11 +154,17 @@ func (c *Client) GraphQL(r Repo) bool {
 // known and anon is false. The caller closes the response body; non-2xx responses are
 // returned as they are.
 func (c *Client) restGet(ctx context.Context, r Repo, path string, anon bool) (*http.Response, error) {
+	return c.restGetAccept(ctx, r, path, anon, "application/vnd.github+json")
+}
+
+// restGetAccept is restGet asking for the media type accept, for an endpoint whose default
+// JSON answer does not carry what the caller needs (see Client.File).
+func (c *Client) restGetAccept(ctx context.Context, r Repo, path string, anon bool, accept string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.rest(r)+path, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Accept", accept)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", httpx.UserAgent())
 	if t, ok := c.token(r); ok && !anon {

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -40,6 +41,35 @@ func TestFile(t *testing.T) {
 	}
 	if _, err := c.File(t.Context(), oR, "dir", ""); err == nil {
 		t.Error("directory listing: want error")
+	}
+}
+
+// A file over 1 MB (a shared Renovate config, say) comes back from the contents API with an
+// empty content and `"encoding": "none"`; only the raw media type carries it.
+func TestFileOverOneMegabyte(t *testing.T) {
+	want := strings.Repeat("{\"extends\":[]}\n", 100_000)
+	var accepts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.RequestURI() != "/repos/o/r/contents/big.json?ref=main" {
+			http.NotFound(w, r)
+			return
+		}
+		accepts = append(accepts, r.Header.Get("Accept"))
+		if r.Header.Get("Accept") == "application/vnd.github.raw+json" {
+			_, _ = io.WriteString(w, want)
+			return
+		}
+		_, _ = io.WriteString(w, `{"type":"file","encoding":"none","size":1500000,"content":""}`)
+	}))
+	defer srv.Close()
+	c := New(srv.Client(), tokenAuth(), make(chan struct{}, 1), WithAPI(srv.URL, srv.URL+"/graphql"))
+
+	b, err := c.File(t.Context(), oR, "big.json", "main")
+	if err != nil || string(b) != want {
+		t.Fatalf("File = %d bytes, %v, want %d bytes", len(b), err, len(want))
+	}
+	if len(accepts) != 2 || accepts[0] != "application/vnd.github+json" || accepts[1] != "application/vnd.github.raw+json" {
+		t.Errorf("Accept headers = %q", accepts)
 	}
 }
 
