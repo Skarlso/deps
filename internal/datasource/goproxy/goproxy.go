@@ -98,12 +98,12 @@ const gomodManager = "gomod"
 // prefix lists any, d.Name's own lookup decides. Deduped per name; dir is the directory of
 // the first lookup.
 //
-// A prefix whose proxy lookup failed (errProxyFailed) ends the resolution instead: the proxy
-// neither listed the prefix nor reported it missing, so whether it is the module is unknown
-// and a shorter prefix must not win. A 5xx on `…/golangci-lint/v2` would otherwise resolve
-// the package to `…/golangci-lint`, the v1 module, for the rest of the run. A go command that
-// rejects a path does answer it: `go list -m -versions <package path>` fails for every path
-// that is no module, so those failures still fall through.
+// A prefix whose lookup failed (errLookupFailed) ends the resolution instead: it neither
+// listed the prefix nor reported it missing, so whether it is the module is unknown and a
+// shorter prefix must not win. A 5xx on `…/golangci-lint/v2`, or a `git ls-remote` of it that
+// could not authenticate, would otherwise resolve the package to `…/golangci-lint`, the v1
+// module, for the rest of the run. A go command that rejects a path does answer it
+// (rejectedPath), and so does one that lists no versions for it, so both fall through.
 func (s *Source) module(ctx context.Context, d dep.Dep, dir string) (string, error) {
 	if d.Manager == gomodManager {
 		return d.Name, nil
@@ -119,7 +119,7 @@ func (s *Source) module(ctx context.Context, d dep.Dep, dir string) (string, err
 					slog.DebugContext(ctx, "package resolved to module", "package", d.Name, "module", p)
 				}
 				return p, nil
-			case errors.Is(err, errProxyFailed):
+			case errors.Is(err, errLookupFailed):
 				return "", fmt.Errorf("%s: resolving the module of %s: %w", p, d.Name, err)
 			}
 		}
@@ -170,7 +170,7 @@ func (s *Source) prime(ctx context.Context, paths []string, dir string) {
 	}
 	for _, p := range batch {
 		if m, ok := res[p]; ok {
-			_, _ = s.entry(ctx, p, dir, func() ([]string, bool, error) { return m.Versions, false, m.Err })
+			_, _ = s.entry(ctx, p, dir, func() ([]string, bool, error) { return goVersions(m) })
 		}
 	}
 }
@@ -539,7 +539,7 @@ func (s *Source) resolve(ctx context.Context, modPath, dir string) (vs []string,
 		} else {
 			vs, notFound, err = s.fetch(ctx, base+"/"+escaped+"/@v/list")
 			if err != nil && !notFound {
-				err = proxyFailure{err}
+				err = lookupFailure{err}
 			}
 			if err == nil {
 				vs = s.dropRetracted(ctx, modPath, base, escaped, vs)
@@ -620,19 +620,21 @@ func (s *Source) modBytes(ctx context.Context, modPath, base, escaped, version s
 	return b, nil
 }
 
-// errProxyFailed marks a GOPROXY URL that neither listed a module's versions nor reported the
-// module missing: a 5xx, a timeout, a refused connection, an unreadable `file://` entry. Such
-// a lookup says nothing about whether the path is a module (see module).
-var errProxyFailed = errors.New("proxy lookup failed")
+// errLookupFailed marks a lookup that neither listed a module's versions nor reported the
+// module missing: a GOPROXY URL that answered a 5xx, timed out, refused the connection or
+// named an unreadable `file://` entry, and a go command run that failed without rejecting the
+// path (rejectedPath). Such a lookup says nothing about whether the path is a module (see
+// module).
+var errLookupFailed = errors.New("lookup failed")
 
-// proxyFailure is one such failure. It reads as the failure itself and wraps it alone, so the
+// lookupFailure is one such failure. It reads as the failure itself and wraps it alone, so the
 // errors a lookup reports and the chain they are read from (cmd/deps's limitReason walks the
-// single-wrap chain of a rate limit) are unchanged; only errProxyFailed matches on top.
-type proxyFailure struct{ err error }
+// single-wrap chain of a rate limit) are unchanged; only errLookupFailed matches on top.
+type lookupFailure struct{ err error }
 
-func (e proxyFailure) Error() string        { return e.err.Error() }
-func (e proxyFailure) Unwrap() error        { return e.err }
-func (e proxyFailure) Is(target error) bool { return target == errProxyFailed }
+func (e lookupFailure) Error() string        { return e.err.Error() }
+func (e lookupFailure) Unwrap() error        { return e.err }
+func (e lookupFailure) Is(target error) bool { return target == errLookupFailed }
 
 // walk runs step for modPath along GOPROXY until one succeeds. step gets a proxy base URL and
 // the escaped module path, or base "" when the go command must be used (a `direct` entry, or a
@@ -697,21 +699,47 @@ var errNoProxy = errors.New("no proxy has")
 func (s *Source) direct(ctx context.Context, dir, modPath string) ([]string, error) {
 	release, err := httpx.Acquire(ctx, s.getter.Sem)
 	if err != nil {
-		return nil, err
+		return nil, lookupFailure{err}
 	}
 	defer release()
 	res, err := s.list(ctx, dir, modPath)
 	if err != nil {
-		return nil, err
+		return nil, lookupFailure{err}
 	}
 	m, ok := res[modPath]
-	switch {
-	case !ok:
-		return nil, fmt.Errorf("go list -m -versions %s: no answer", modPath)
-	case m.Err != nil:
-		return nil, m.Err
+	if !ok {
+		return nil, lookupFailure{fmt.Errorf("go list -m -versions %s: no answer", modPath)}
 	}
-	return m.Versions, nil
+	vs, _, err := goVersions(m)
+	return vs, err
+}
+
+// goVersions is what one module of a `go list` run resolved to: its versions, or its failure,
+// marked with errLookupFailed unless the go command rejected the path as a module. proxied is
+// false, as the versions are the go command's.
+func goVersions(m gotool.ModuleVersions) (vs []string, proxied bool, err error) {
+	switch {
+	case m.Err == nil:
+		return m.Versions, false, nil
+	case rejectedPath(m.Err):
+		return nil, false, m.Err
+	}
+	return nil, false, lookupFailure{m.Err}
+}
+
+// rejectedPath reports whether err, a failure the go command reported for a module path,
+// rejects that path as a module rather than leaving it unanswered. The go command resolves a
+// path to a repository first and says so when it finds none: `unrecognized import path "p":
+// parse https://p?go-get=1: no go-import meta tags ()`, `invalid github.com/ import path "p"`,
+// `malformed module path "p"`. cmd/go wraps every failure of that resolution in a
+// notExistError (modfetch.lookupDirect), an unreachable host included, and `go install
+// <package>@latest` walks on to a shorter prefix for all of them, so deps does too. A path
+// that resolves to a repository without matching tags is no failure at all: the run lists no
+// versions for it. Every other failure — a VCS command that could not reach or authenticate at
+// the repository, a proxy that answered a 5xx — says nothing about the path.
+func rejectedPath(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "import path") || strings.Contains(msg, "malformed module path")
 }
 
 // Body caps of the proxy endpoints: an `@latest` or `.info` document, a `.mod` file. A version

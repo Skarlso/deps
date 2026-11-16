@@ -3,12 +3,14 @@ package goproxy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -311,7 +313,7 @@ func TestReleasesPackagePathOneGoList(t *testing.T) {
 						res[m] = gotool.ModuleVersions{Versions: []string{"v2.0.0", "v2.1.0"}}
 						continue
 					}
-					res[m] = gotool.ModuleVersions{Err: errors.New("no matching versions for " + m)}
+					res[m] = gotool.ModuleVersions{Err: unrecognized(m)}
 				}
 				return res, nil
 			}
@@ -382,6 +384,77 @@ func TestPrimeSharesAnswersWithoutHoldingASlot(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("prime shared the run's answers while holding the only request slot")
+	}
+}
+
+// unrecognized is how the go command rejects a path it finds no repository for.
+func unrecognized(modPath string) error {
+	return fmt.Errorf("go list -m -versions %s: unrecognized import path %q: parse https://%s?go-get=1: no go-import meta tags ()", modPath, modPath, modPath)
+}
+
+// Only a go command that rejects a prefix as a module lets the resolution of a package path
+// walk on to a shorter one. A `git ls-remote` of `…/tools/v2` that could not authenticate, and
+// a run that failed, leave the prefix unanswered, where `…/tools/v2/cmd/lint` used to resolve
+// to `…/tools`, the v1 module, for the rest of the run.
+func TestReleasesPackagePathGoCommandFailure(t *testing.T) {
+	const pkg = "private.example/tools/v2/cmd/lint"
+	authFailed := errors.New("go list -m -versions private.example/tools/v2: module private.example/tools/v2: " +
+		"git ls-remote -q --end-of-options https://private.example/tools in /cache/vcs/8e91b3: exit status 128:\n" +
+		"\tfatal: could not read Username for 'https://private.example': terminal prompts disabled")
+	runFailed := errors.New("go list -m -e -versions -json: exit status 1: go: GOPROXY list is not the empty string, but contains no entries")
+	tests := []struct {
+		name    string
+		v2Err   error // what the run reports for private.example/tools/v2
+		runErr  error // what a run that asks for it fails with
+		wantErr error // nil: the package resolves to private.example/tools
+	}{
+		{name: "rejected prefix walks on", v2Err: unrecognized("private.example/tools/v2")},
+		{name: "failed repository lookup stops", v2Err: authFailed, wantErr: authFailed},
+		{name: "failed run stops", runErr: runFailed, wantErr: runFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := New(nil, make(chan struct{}, 2))
+			s.env = func(context.Context) (gotool.GoEnv, error) {
+				return gotool.GoEnv{Proxy: "direct", NoProxy: "private.example"}, nil
+			}
+			s.list = func(_ context.Context, _ string, mods ...string) (map[string]gotool.ModuleVersions, error) {
+				if tt.runErr != nil && slices.Contains(mods, "private.example/tools/v2") {
+					return nil, tt.runErr
+				}
+				res := make(map[string]gotool.ModuleVersions, len(mods))
+				for _, m := range mods {
+					switch m {
+					case "private.example/tools/v2":
+						res[m] = gotool.ModuleVersions{Err: tt.v2Err}
+					case "private.example/tools":
+						res[m] = gotool.ModuleVersions{Versions: []string{"v1.9.0"}}
+					default:
+						res[m] = gotool.ModuleVersions{Err: unrecognized(m)}
+					}
+				}
+				return res, nil
+			}
+			d := dep.Dep{Manager: "mise", Name: pkg}
+			for range 2 { // a failed resolution is shared, as a successful one is
+				rels, err := s.Releases(t.Context(), d, ".")
+				switch {
+				case tt.wantErr != nil:
+					if !errors.Is(err, tt.wantErr) || rels != nil {
+						t.Fatalf("Releases = %+v, %v; want %v", rels, err, tt.wantErr)
+					}
+				case err != nil || !reflect.DeepEqual(rels, []datasource.Release{{Version: "v1.9.0"}}):
+					t.Fatalf("Releases = %+v, %v", rels, err)
+				}
+			}
+			wantMod := "private.example/tools"
+			if tt.wantErr != nil {
+				wantMod = d.Name
+			}
+			if got := s.resolved(d); got != wantMod {
+				t.Errorf("resolved = %q, want %q", got, wantMod)
+			}
+		})
 	}
 }
 
