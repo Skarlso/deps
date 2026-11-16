@@ -32,7 +32,7 @@ Each of these is reported when it occurs; the rest of the config still applies.
 | `fileMatch`/`managerFilePatterns` on built-in managers | ignored: deps' managers find their files themselves |
 | `hostRules` | ignored: credentials come from the environment (`deps help environment`) |
 | other `vulnerabilityAlerts` keys (`labels`, `automerge`, `prConcurrentLimit`, `rangeStrategy`, `vulnerabilityFixStrategy: highest`, a non-null `minimumReleaseAge`, …) | ignored: deps has no settings for security updates only (info for labels, assignees, reviewers and PR texts, warning otherwise); `schedule` is ignored by both |
-| PR and commit texts (`prBody*`, `prTitleStrict`, `commitBody`, `groupSlug`, …), onboarding and dashboard texts | ignored (info) |
+| PR and commit texts (`prBody*`, `prTitleStrict`, `commitBody`, …), onboarding and dashboard texts | ignored (info) |
 | `prTitle`/`commitMessage*` parts with Handlebars helpers, block expressions or other fields | the scope keeps deps' built-in titles (warning); with `semanticCommits: disabled` it also warns that deps writes conventional commits |
 
 ## Behavior differences

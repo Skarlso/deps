@@ -27,7 +27,7 @@ All three share one translator, so a migrated file behaves exactly like `--renov
 What it reports while translating:
 
 - `warn <setting>: <msg>` — deps cannot express this; the [differences page](renovate-differences.md#what-compatibility-mode-cannot-translate) says what was dropped.
-- `info <setting>: <msg>` — translated away because it changes no update or PR (labels, PR texts, `groupSlug`, …).
+- `info <setting>: <msg>` — translated away because it changes no update or PR (labels, PR texts, …).
 
 `migrate` prints both and writes them as the file's head comment; `--renovate` logs them.
 

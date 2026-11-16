@@ -26,7 +26,7 @@ deps migrate --verbose --output /tmp/deps.yaml     # --verbose also prints info 
 It finds the config like Renovate (`renovate.json(c|5)`, the same under `.github/`, `.gitlab/`, `.gitea/`, `.forgejo/`, `.renovaterc*`, `package.json`'s `renovate` key), resolves `extends` (built-in presets; `github>`, `gitlab>`, `gitea>`, `forgejo>`, `local>` fetched) and prints:
 
 - `warn    <setting>: <msg>`: deps cannot express it, or translated it approximately. **Every warning needs a decision** (step 2).
-- `info    <setting>: <msg>`: no effect on which updates or PRs exist (labels on presets, PR texts, `groupSlug`, built-in preset settings). Skim; no action unless the user relies on it.
+- `info    <setting>: <msg>`: no effect on which updates or PRs exist (labels on presets, PR texts, built-in preset settings). Skim; no action unless the user relies on it.
 - The summary line, and `schedule windows: …` with the advice below it. The workflow must run inside every window (an hourly cron is enough); note them for step 4.
 
 Exit 2 means a config problem (unparsable file, `enabled: false`, a preset that cannot be fetched); fix the cause, don't work around it.

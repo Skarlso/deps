@@ -350,7 +350,7 @@ var infoKeys = func() map[string]bool {
 		printConfig dependencyDashboardHeader dependencyDashboardFooter dependencyDashboardAutoclose
 		dependencyDashboardOSVVulnerabilitySummary dependencyDashboardCategory customizeDashboard userStrings
 		branchConcurrentLimit commitHourlyLimit branchNameStrict branchTopic hashedBranchLength
-		groupSlug fetchChangeLogs recreateWhen suppressNotifications ignoreTests internalChecksFilter
+		fetchChangeLogs recreateWhen suppressNotifications ignoreTests internalChecksFilter
 		internalChecksAsSuccess gitNoVerify statusCheckNames cloneSubmodules persistRepoData confidential
 		respectLatest hostRules postUpdateOptions semanticCommits`) {
 		m[k] = true

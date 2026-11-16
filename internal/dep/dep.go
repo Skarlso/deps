@@ -302,6 +302,9 @@ type Update struct {
 	NewDigest  string // "" unless the result is digest-pinned; gomod pseudo-versions: the new commit
 	NewName    string // gomod major module path update: the new module path (`<path>/v<N>`); replacement: the new package name; "" = unchanged
 	Group      string // policy group name, "" = own PR
+	// GroupSlug (rules[].groupSlug) replaces the group name in the branch of the group's PR,
+	// "" = the name; it does not change which updates share a PR.
+	GroupSlug string
 	// SecurityGroup is the policy security group of a security update (rules[].securityGroup),
 	// "" = own PR; a security update never joins Group (unless it edits a shared version).
 	SecurityGroup string

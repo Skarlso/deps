@@ -184,6 +184,7 @@ customDatasources:
   - [`rules[].replacementVersion`](#rulesreplacementversion)
   - [`rules[].replacementPrefix`](#rulesreplacementprefix)
   - [`rules[].group`](#rulesgroup)
+  - [`rules[].groupSlug`](#rulesgroupslug)
   - [`rules[].securityGroup`](#rulessecuritygroup)
   - [`rules[].commitType`](#rulescommittype)
   - [`rules[].commitScope`](#rulescommitscope)
@@ -1617,6 +1618,12 @@ Group name: all deps with the same group share one PR.
 - Built-in [monorepo groups](#builtinsmonorepos) are overridden by any rule that sets `group`.
 - Security updates are not members (except of a shared version definition, which cannot be split); [`securityGroup`](#rulessecuritygroup) groups them apart.
 - **Settings** shared by the group's PR (schedule, labels, automerge, …) are written once in [`groups`](#groups) instead of on every rule setting the group.
+
+### `rules[].groupSlug`
+
+Branch topic of the group's PR (Renovate's groupSlug): the branch is \<prefix>group/\<slug of groupSlug> instead of \<prefix>group/\<slug of group>. The last matching rule setting it wins; it only renames the branch, deps still groups by group name.
+
+- **Type:** string
 
 ### `rules[].securityGroup`
 

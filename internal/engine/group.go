@@ -59,7 +59,8 @@ const MaintenanceBranch = "lock-file-maintenance"
 // group of that name apart from the policy group of the same name. Updates of a shared version
 // definition carry the group Resolve gave them (unifyShared), security updates included: they
 // edit the same bytes. Branches are <branchPrefix><topicPrefix><branchSlug(name)> and
-// <branchPrefix><topicPrefix>group/<branchSlug(group)>, with "-<bucket>" appended for a
+// <branchPrefix><topicPrefix>group/<branchSlug(group)> (of rules[].groupSlug instead, when
+// the group's updates carry one), with "-<bucket>" appended for a
 // non-empty bucket, then "-security" for a security group; "" means
 // config.DefaultBranchPrefix. A branch another group has taken gets a short hash of the
 // group's key appended, since two groups must never share one; branches are handed out in key
@@ -78,7 +79,7 @@ func GroupUpdates(updates []dep.Update, branchPrefix string) []Group {
 		case u.Maintenance():
 			k = groupKey{kind: MaintenanceBranch, name: MaintenanceBranch}
 		case u.Group != "" && (len(u.Advisories) == 0 || u.Dep.VersionRef != ""):
-			k.kind, k.name = GroupKind, u.Group
+			k.kind, k.name, k.slug = GroupKind, u.Group, u.GroupSlug
 		case u.SecurityGroup != "" && len(u.Advisories) > 0:
 			k.kind, k.name, k.security = GroupKind, u.SecurityGroup, true
 		}
@@ -121,10 +122,11 @@ func GroupUpdates(updates []dep.Update, branchPrefix string) []Group {
 }
 
 // groupKey identifies the group an update joins: its branch topic prefix (the expanded
-// additionalBranchPrefix), kind, name, PR bucket and whether it is a security group.
+// additionalBranchPrefix), kind, name, branch slug (rules[].groupSlug, policy groups only),
+// PR bucket and whether it is a security group.
 type groupKey struct {
-	topicPrefix, kind, name, bucket string
-	security                        bool
+	topicPrefix, kind, name, slug, bucket string
+	security                              bool
 }
 
 // compare orders two keys, which are distinct, so it is a total order. The fixed lock file
@@ -139,7 +141,7 @@ func (k groupKey) compare(o groupKey) int {
 		sec = -1
 	}
 	return cmp.Or(cmp.Compare(kindRank(k.kind), kindRank(o.kind)), strings.Compare(k.topicPrefix, o.topicPrefix),
-		strings.Compare(k.name, o.name), strings.Compare(k.bucket, o.bucket), sec)
+		strings.Compare(k.name, o.name), strings.Compare(k.slug, o.slug), strings.Compare(k.bucket, o.bucket), sec)
 }
 
 // kindRank ranks the Group kinds by how firmly they hold their branch.
@@ -160,7 +162,8 @@ func (k groupKey) branch(branchPrefix string) string {
 	case MaintenanceBranch:
 		b = branchPrefix + MaintenanceBranch
 	case GroupKind:
-		b = branchPrefix + k.topicPrefix + GroupKind + "/" + branchSlug(k.name)
+		// rules[].groupSlug (Renovate's) renames the branch topic of a policy group.
+		b = branchPrefix + k.topicPrefix + GroupKind + "/" + branchSlug(cmp.Or(k.slug, k.name))
 	default:
 		b = branchPrefix + k.topicPrefix + branchSlug(k.name)
 	}
@@ -200,7 +203,7 @@ func handOut(keys []groupKey, branchPrefix string) []string {
 	for _, i := range order {
 		k := keys[i]
 		for t.taken(out[i]) {
-			out[i] += "-" + nameHash(k.topicPrefix, k.kind, k.name, k.bucket, strconv.FormatBool(k.security))
+			out[i] += "-" + nameHash(k.topicPrefix, k.kind, k.name, k.slug, k.bucket, strconv.FormatBool(k.security))
 		}
 		t.take(out[i])
 	}

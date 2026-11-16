@@ -243,6 +243,30 @@ func TestGroupUpdatesPolicyGroupsAndSecurity(t *testing.T) {
 	}
 }
 
+// rules[].groupSlug (Renovate's) renames the branch topic of a policy group; the group still
+// batches by its name.
+func TestGroupUpdatesGroupSlug(t *testing.T) {
+	gomod := func(name string) dep.Dep { return dep.Dep{Manager: "gomod", Name: name} }
+	updates := []dep.Update{
+		{Dep: gomod("example.com/a"), NewVersion: "v1.1.0", Group: "npm dependencies", GroupSlug: "npm-deps"},
+		{Dep: gomod("example.com/b"), NewVersion: "v1.2.0", Group: "npm dependencies", GroupSlug: "npm-deps"},
+		{Dep: gomod("example.com/c"), NewVersion: "v1.3.0", Group: "other"},
+	}
+	groups := GroupUpdates(updates, "")
+	want := map[string]string{"npm dependencies": "deps/group/npm-deps", "other": "deps/group/other"}
+	if len(groups) != len(want) {
+		t.Fatalf("groups = %+v", groups)
+	}
+	for _, g := range groups {
+		if g.Branch != want[g.Name] {
+			t.Errorf("group %q is on %q, want %q", g.Name, g.Branch, want[g.Name])
+		}
+	}
+	if n := len(groups[0].Updates) + len(groups[1].Updates); n != 3 {
+		t.Errorf("updates = %d, want 3", n)
+	}
+}
+
 // Each group keeps a branch of its own that git accepts: names rendering alike ("@types/node"
 // and "types/node", a bucket suffix against a name ending in it) would otherwise push two PRs
 // into one branch, and a name git rejects as a ref would lose its PR altogether.

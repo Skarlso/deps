@@ -38,14 +38,16 @@ type Policy struct {
 	// AllowedUpdateTypes are the allowed update types. The map is shared between policies
 	// and must not be modified.
 	AllowedUpdateTypes map[dep.UpdateType]bool
-	Group              string        // "" = own PR
-	GroupSettings      bool          // the groups entry of Group applied after the rules
-	SecurityGroup      string        // group of the dep's security updates, "" = own PR each
-	Schedule           *schedule.Set // nil = always
-	Rules              []int         // indices of the matching user rules, in order
-	Monorepo           string        // built-in monorepo that set the initial Group, "" = none
-	Toolchain          string        // built-in toolchain group (RubyGroup) that set the initial Group, "" = none
-	Registry           string        // built-in registry group (VcpkgGroup) that set the initial Group, "" = none
+	Group              string // "" = own PR
+	// GroupSlug replaces the group name in the branch of the group's PR, "" = the name.
+	GroupSlug     string
+	GroupSettings bool          // the groups entry of Group applied after the rules
+	SecurityGroup string        // group of the dep's security updates, "" = own PR each
+	Schedule      *schedule.Set // nil = always
+	Rules         []int         // indices of the matching user rules, in order
+	Monorepo      string        // built-in monorepo that set the initial Group, "" = none
+	Toolchain     string        // built-in toolchain group (RubyGroup) that set the initial Group, "" = none
+	Registry      string        // built-in registry group (VcpkgGroup) that set the initial Group, "" = none
 	// PRSettings are the PR settings its updates carry.
 	dep.PRSettings
 	Kind   dep.UpdateType // update type of a PolicyFor result, "" for Policy
@@ -599,6 +601,9 @@ func (c *Config) policy(d dep.Dep, kind dep.UpdateType, age time.Duration) Polic
 		}
 		if r.Group != "" {
 			p.Group = r.Group
+		}
+		if r.GroupSlug != "" {
+			p.GroupSlug = r.GroupSlug
 		}
 		if r.SecurityGroup != "" {
 			p.SecurityGroup = r.SecurityGroup

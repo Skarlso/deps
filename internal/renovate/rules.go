@@ -23,7 +23,7 @@ var updateTypeBlocks = []struct{ key, typ string }{
 
 // effectOrder is the output order of rule effects (the field order of config.Rule).
 var effectOrder = []string{"ignore", "pin", "allow", "rangeStrategy", "versioning", "extractVersion", "registryUrls", "replacementName",
-	"replacementVersion", "replacementPrefix", "separate", "group", "commitType", "commitScope", "schedule", "additionalBranchPrefix",
+	"replacementVersion", "replacementPrefix", "separate", "group", "groupSlug", "commitType", "commitScope", "schedule", "additionalBranchPrefix",
 	"minimumReleaseAge", "minimumReleaseAgeBehaviour", "abandonmentThreshold", "automerge", "automergeStrategy", "automergeType",
 	"labels", "addLabels", "reviewers", "assignees", "prTitle", "prHeader", "prFooter", "postUpgradeTasks", "dashboardApproval",
 	"draftPR", "prCreation"}

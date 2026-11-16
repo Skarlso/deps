@@ -1675,7 +1675,7 @@ func applyPolicy(up *dep.Update, kp *config.Policy) {
 	up.PRSettings = kp.PRSettings
 	up.BranchTopicPrefix = config.ExpandBranchPrefix(kp.AdditionalBranchPrefix, up.Dep)
 	if len(up.Advisories) == 0 {
-		up.Group, up.Schedule, up.SecurityGroup = kp.Group, kp.Schedule, ""
+		up.Group, up.GroupSlug, up.Schedule, up.SecurityGroup = kp.Group, kp.GroupSlug, kp.Schedule, ""
 	} else {
 		up.SecurityGroup, up.DashboardApproval = kp.SecurityGroup, false
 	}
