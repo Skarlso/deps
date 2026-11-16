@@ -230,6 +230,8 @@ customDatasources:
   - [`groups.<name>.prFooter`](#groupsnameprfooter)
   - [`groups.<name>.dashboardApproval`](#groupsnamedashboardapproval)
   - [`groups.<name>.slug`](#groupsnameslug)
+  - [`groups.<name>.commitType`](#groupsnamecommittype)
+  - [`groups.<name>.commitScope`](#groupsnamecommitscope)
 - [`lockFileMaintenance`](#lockfilemaintenance)
   - [`lockFileMaintenance.enabled`](#lockfilemaintenanceenabled)
   - [`lockFileMaintenance.schedule`](#lockfilemaintenanceschedule)
@@ -2165,6 +2167,18 @@ Overrides dashboardApproval for the updates of the group, after the top level an
 ### `groups.<name>.slug`
 
 Branch topic of the group's PR (Renovate's groupSlug): the branch is \<branchPrefix>group/\<slug> instead of \<branchPrefix>group/\<slug of the group name>. It renames the branch only; the updates of the group share one PR either way.
+
+- **Type:** string
+
+### `groups.<name>.commitType`
+
+Conventional commit type of the group's PR title and commit subject (fix, chore, …), overriding the type its updates carry; a group holding a security update always uses fix.
+
+- **Type:** string
+
+### `groups.<name>.commitScope`
+
+Conventional commit scope of the group's PR title and commit subject, overriding the scope its updates carry; an empty string means no scope (`chore: ...`).
 
 - **Type:** string
 

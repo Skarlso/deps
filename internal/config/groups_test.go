@@ -150,3 +150,38 @@ groups:
 		t.Errorf("err = %v", err)
 	}
 }
+
+// The keys of the group's PR itself (slug, commitType, commitScope) come from its groups
+// entry and override what the rules of the group set.
+func TestGroupPRKeys(t *testing.T) {
+	c, err := load(t, ".deps.yaml", `rules:
+  - managers: [gomod]
+    group: tooling
+    commitType: fix
+    commitScope: deps
+  - managers: [npm]
+    group: tooling
+groups:
+  tooling:
+    slug: tools
+    commitType: chore
+    commitScope: tool-updates
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []dep.Dep{{Manager: "gomod", Name: "example.com/a"}, {Manager: "npm", Name: "react"}} {
+		p := c.Policy(d)
+		if p.GroupSlug != "tools" || p.CommitType != "chore" || p.CommitScope != "tool-updates" {
+			t.Errorf("%s policy: slug %q, %s(%s)", d.Manager, p.GroupSlug, p.CommitType, p.CommitScope)
+		}
+	}
+	// Without a groups entry the rule's own commit settings stand.
+	c2, err := load(t, ".deps.yaml", "rules: [{managers: [gomod], group: tooling, commitType: fix, commitScope: deps}]\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := c2.Policy(dep.Dep{Manager: "gomod", Name: "example.com/a"}); p.CommitType != "fix" || p.CommitScope != "deps" || p.GroupSlug != "" {
+		t.Errorf("policy without a groups entry: slug %q, %s(%s)", p.GroupSlug, p.CommitType, p.CommitScope)
+	}
+}

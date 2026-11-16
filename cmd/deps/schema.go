@@ -206,8 +206,8 @@ func describeGroupSettings(s *jsonschema.Schema) {
 			drop = append(drop, key)
 			continue
 		}
-		if key == "slug" {
-			continue // its own description, not an override of a top-level key
+		if slices.Contains(config.GroupOwnKeys, key) {
+			continue // their own descriptions, not overrides of a top-level key
 		}
 		p.Description = fmt.Sprintf("Overrides %s for the updates of the group, after the top level and every rule (see the top-level %s).", key, key)
 	}

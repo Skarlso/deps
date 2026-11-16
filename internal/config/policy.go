@@ -633,6 +633,12 @@ func (c *Config) policy(d dep.Dep, kind dep.UpdateType, age time.Duration) Polic
 	if g := c.Groups[p.Group]; g != nil && p.Group != "" {
 		p.apply(&g.Settings)
 		p.GroupSlug = g.Slug
+		if g.CommitType != "" {
+			p.CommitType = g.CommitType
+		}
+		if g.CommitScope != nil {
+			p.CommitScope = *g.CommitScope
+		}
 		p.GroupSettings = true
 	}
 	return p

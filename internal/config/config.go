@@ -337,6 +337,10 @@ type GroupSettings struct {
 	Settings `yaml:",inline" jsonschema_variant:"group"`
 	// Slug replaces the group name in the branch of the group's PR (Renovate's groupSlug).
 	Slug string `yaml:"slug" jsonschema_description:"Branch topic of the group's PR (Renovate's groupSlug): the branch is <branchPrefix>group/<slug> instead of <branchPrefix>group/<slug of the group name>. It renames the branch only; the updates of the group share one PR either way."`
+	// CommitType and CommitScope are the conventional-commit type and scope of the group's
+	// PR title and commit subject; they override what its updates carry.
+	CommitType  string  `yaml:"commitType" jsonschema_description:"Conventional commit type of the group's PR title and commit subject (fix, chore, …), overriding the type its updates carry; a group holding a security update always uses fix."`
+	CommitScope *string `yaml:"commitScope" jsonschema_description:"Conventional commit scope of the group's PR title and commit subject, overriding the scope its updates carry; an empty string means no scope ('chore: ...')."`
 
 	source string // the file the entry is written in (Source)
 	line   int    // its line there
@@ -346,10 +350,14 @@ type GroupSettings struct {
 // there; "" when it was not loaded from a file.
 func (g *GroupSettings) Source() (file string, line int) { return g.source, g.line }
 
-// GroupKeys are the keys groups entries accept: slug, and the Settings keys but the
+// GroupOwnKeys are the groups keys that are not Settings keys: they describe the group's PR
+// itself, not the policy of its updates, and have descriptions of their own.
+var GroupOwnKeys = []string{"slug", "commitType", "commitScope"}
+
+// GroupKeys are the keys groups entries accept: GroupOwnKeys, and the Settings keys but the
 // pre-policy ones.
 var GroupKeys = func() []string {
-	out := []string{"slug"}
+	out := slices.Clone(GroupOwnKeys)
 	for _, f := range keyFields(reflect.TypeFor[Settings]()) {
 		if k := yamlKey(f); !slices.Contains(PrePolicyKeys, k) {
 			out = append(out, k)

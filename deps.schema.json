@@ -466,6 +466,16 @@
           "type": "string",
           "description": "Branch topic of the group's PR (Renovate's groupSlug): the branch is <branchPrefix>group/<slug> instead of <branchPrefix>group/<slug of the group name>. It renames the branch only; the updates of the group share one PR either way.",
           "markdownDescription": "Branch topic of the group's PR (Renovate's groupSlug): the branch is \\<branchPrefix>group/\\<slug> instead of \\<branchPrefix>group/\\<slug of the group name>. It renames the branch only; the updates of the group share one PR either way."
+        },
+        "commitType": {
+          "type": "string",
+          "description": "Conventional commit type of the group's PR title and commit subject (fix, chore, …), overriding the type its updates carry; a group holding a security update always uses fix.",
+          "markdownDescription": "Conventional commit type of the group's PR title and commit subject (fix, chore, …), overriding the type its updates carry; a group holding a security update always uses fix."
+        },
+        "commitScope": {
+          "type": "string",
+          "description": "Conventional commit scope of the group's PR title and commit subject, overriding the scope its updates carry; an empty string means no scope ('chore: ...').",
+          "markdownDescription": "Conventional commit scope of the group's PR title and commit subject, overriding the scope its updates carry; an empty string means no scope (`chore: ...`)."
         }
       },
       "additionalProperties": false,
