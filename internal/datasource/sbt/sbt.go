@@ -170,7 +170,7 @@ func (p Package) Releases(ctx context.Context, d dep.Dep, dir string) ([]datasou
 			p.platform.Store(d.Name+"\x00"+d.Source, name)
 			return prels, nil
 		case !errors.Is(perr, mavends.ErrNotFound):
-			return nil, err
+			return nil, perr
 		}
 	}
 	return nil, err

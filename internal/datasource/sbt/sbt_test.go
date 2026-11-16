@@ -2,6 +2,7 @@ package sbtds
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -173,6 +174,28 @@ func TestPackagePlatformFallbackOnlyOnNotFound(t *testing.T) {
 	}
 	if got := platformNames("g:a_native0.5_3"); got != nil {
 		t.Errorf("platformNames of a Scala Native artifact = %v", got)
+	}
+}
+
+// A failing platform probe reports the probe's error, not the primary artifact's "not
+// found": a broken repository must fail the dependency instead of skipping it silently.
+func TestPackagePlatformProbeError(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "_sjs1_") {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer s.Close()
+	maven := mavends.New(s.Client(), nil, func(string) string { return "" })
+	pkg, _ := New(maven, s.Client(), nil)
+	_, err := pkg.Releases(context.Background(), dep.Dep{Name: "org.typelevel:cats-core_2.13", Source: s.URL + "/m2/"}, "")
+	if err == nil || !strings.Contains(err.Error(), "HTTP 500") {
+		t.Errorf("err = %v, want the probe's HTTP 500", err)
+	}
+	if errors.Is(err, mavends.ErrNotFound) {
+		t.Errorf("err = %v, want no ErrNotFound: the dep would be skipped", err)
 	}
 }
 
