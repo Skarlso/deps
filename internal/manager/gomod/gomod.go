@@ -180,23 +180,35 @@ func (gomodManager) Rename(d dep.Dep, name string) (dep.Dep, error) {
 // (u.NewName) rewrites the import paths of the old module (the path itself and its packages)
 // in the .go files of the dep's module, i.e. every .go file below the go.mod's directory
 // except in directories the go command ignores (vendor, testdata, names starting with . or _)
-// and in nested modules. Only the import path literals change. The default ignorePaths do not
-// apply: tests belong to the module and must keep compiling.
+// and in nested modules. Imports of a package of another module below the old path (a nested
+// module the go.mod requires, or the module itself) keep their path, since that package did
+// not move. Only the import path literals change. The default ignorePaths do not apply:
+// tests belong to the module and must keep compiling.
 func (m gomodManager) FileEdits(root string, u dep.Update) (map[string][]patch.Edit, error) {
 	if u.NewName == "" {
 		return nil, nil
 	}
-	base := filepath.Join(root, filepath.FromSlash(path.Dir(u.Dep.File)))
+	mod := filepath.Join(root, filepath.FromSlash(u.Dep.File))
+	base := filepath.Dir(mod)
 	if m.scans == nil {
 		// Without a cache the module is scanned again for every update, so looking for
 		// the one module path is cheaper than indexing every import of every file.
+		paths, err := modPaths(mod)
+		if err != nil {
+			return nil, err
+		}
 		files, err := goFiles(base)
 		if err != nil {
 			return nil, err
 		}
-		return fileEdits(root, files, u)
+		return fileEdits(root, files, u, nested(paths, u.Dep.Name))
 	}
 	e := m.scans.entry(base)
+	paths, err := e.modPaths(mod)
+	if err != nil {
+		return nil, err
+	}
+	below := nested(paths, u.Dep.Name)
 	if !e.first.Swap(true) {
 		// The first update of a module reads its files either way, and reading them for
 		// the one module path is cheaper than indexing every import.
@@ -204,17 +216,63 @@ func (m gomodManager) FileEdits(root string, u dep.Update) (map[string][]patch.E
 		if err != nil {
 			return nil, err
 		}
-		return fileEdits(root, files, u)
+		return fileEdits(root, files, u, below)
 	}
 	ix, err := e.imports(base)
 	if err != nil {
 		return nil, err
 	}
-	return fileEdits(root, ix.importers(u.Dep.Name), u)
+	return fileEdits(root, ix.importers(u.Dep.Name), u, below)
 }
 
-// fileEdits returns the import path edits of files (absolute paths).
-func fileEdits(root string, files []string, u dep.Update) (map[string][]patch.Edit, error) {
+// modPaths returns the module paths the go.mod file (an absolute path) declares: the module's
+// own path and the paths it requires.
+func modPaths(file string) ([]string, error) {
+	src, err := os.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+	f, err := modfile.Parse(file, src, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(f.Require)+1)
+	if f.Module != nil {
+		out = append(out, f.Module.Mod.Path)
+	}
+	for _, r := range f.Require {
+		out = append(out, r.Mod.Path)
+	}
+	return out, nil
+}
+
+// nested returns the module paths of paths that lie strictly below the module path mod. The
+// packages under them belong to those modules, not to mod, so a path update of mod leaves
+// their imports alone.
+func nested(paths []string, mod string) []string {
+	var out []string
+	for _, p := range paths {
+		if len(p) > len(mod)+1 && p[len(mod)] == '/' && strings.HasPrefix(p, mod) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// covers reports whether the import path p is a package of one of the module paths below
+// (nested), which are never empty strings.
+func covers(below []string, p string) bool {
+	for _, m := range below {
+		if strings.HasPrefix(p, m) && (len(p) == len(m) || p[len(m)] == '/') {
+			return true
+		}
+	}
+	return false
+}
+
+// fileEdits returns the import path edits of files (absolute paths); below are the module
+// paths nested in the updated one, whose imports stay as written.
+func fileEdits(root string, files []string, u dep.Update, below []string) (map[string][]patch.Edit, error) {
 	old := []byte(u.Dep.Name)
 	var out map[string][]patch.Edit
 	var buf []byte // reused: most .go files do not mention the module
@@ -232,7 +290,7 @@ func fileEdits(root string, files []string, u dep.Update) (map[string][]patch.Ed
 			return nil, err
 		}
 		rel = filepath.ToSlash(rel)
-		edits, err := importEdits(rel, src, u.Dep.Name, u.NewName)
+		edits, err := importEdits(rel, src, u.Dep.Name, u.NewName, below)
 		if err != nil {
 			return nil, err
 		}
@@ -267,6 +325,10 @@ type scanEntry struct {
 	build sync.Once
 	ix    *importIndex
 	ixErr error
+
+	mod     sync.Once
+	paths   []string
+	pathErr error
 }
 
 // NewScanCache returns an empty ScanCache.
@@ -288,6 +350,12 @@ func (c *ScanCache) entry(dir string) *scanEntry {
 func (e *scanEntry) goFiles(dir string) ([]string, error) {
 	e.walk.Do(func() { e.files, e.err = goFiles(dir) })
 	return e.files, e.err
+}
+
+// modPaths are the module paths of the module's go.mod (the absolute path file), parsed once.
+func (e *scanEntry) modPaths(file string) ([]string, error) {
+	e.mod.Do(func() { e.paths, e.pathErr = modPaths(file) })
+	return e.paths, e.pathErr
 }
 
 // imports is the import index of the module's .go files, built once.
@@ -359,8 +427,8 @@ func readFile(p string, buf []byte) ([]byte, error) {
 }
 
 // importEdits returns the edits replacing the import paths old and old/... with newPath in
-// the Go source src.
-func importEdits(file string, src []byte, old, newPath string) ([]patch.Edit, error) {
+// the Go source src; the packages of the module paths below (nested in old) stay as written.
+func importEdits(file string, src []byte, old, newPath string, below []string) ([]patch.Edit, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly|parser.SkipObjectResolution)
 	if err != nil {
@@ -374,6 +442,9 @@ func importEdits(file string, src []byte, old, newPath string) ([]patch.Edit, er
 		}
 		rest, ok := strings.CutPrefix(p, old)
 		if !ok || rest != "" && rest[0] != '/' {
+			continue
+		}
+		if rest != "" && covers(below, p) {
 			continue
 		}
 		lit := is.Path.Value

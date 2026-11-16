@@ -353,6 +353,64 @@ func TestFileEdits(t *testing.T) {
 	}
 }
 
+// TestFileEditsNestedModules checks that a major module path update leaves the imports of the
+// packages of another module below the old path alone: a nested module the go.mod requires
+// (go.opentelemetry.io/otel/trace), a newer major of the same module and the module's own
+// path. Rewriting those breaks the build, since those packages did not move.
+func TestFileEditsNestedModules(t *testing.T) {
+	for _, tt := range []struct {
+		name, gomod, src, want string
+	}{
+		{
+			name: "required nested module",
+			gomod: "module example.com/x\n\nrequire (\n\tgo.opentelemetry.io/otel v1.38.0\n" +
+				"\tgo.opentelemetry.io/otel/trace v1.38.0\n\tgo.opentelemetry.io/otel/v3 v3.0.0\n)\n",
+			src: "package a\n\nimport (\n\t\"go.opentelemetry.io/otel\"\n\t\"go.opentelemetry.io/otel/attribute\"\n" +
+				"\t\"go.opentelemetry.io/otel/trace\"\n\t\"go.opentelemetry.io/otel/trace/noop\"\n\t\"go.opentelemetry.io/otel/v3/x\"\n)\n",
+			want: "package a\n\nimport (\n\t\"go.opentelemetry.io/otel/v2\"\n\t\"go.opentelemetry.io/otel/v2/attribute\"\n" +
+				"\t\"go.opentelemetry.io/otel/trace\"\n\t\"go.opentelemetry.io/otel/trace/noop\"\n\t\"go.opentelemetry.io/otel/v3/x\"\n)\n",
+		},
+		{
+			name:  "the module itself",
+			gomod: "module go.opentelemetry.io/otel/trace\n\nrequire go.opentelemetry.io/otel v1.38.0\n",
+			src: "package a\n\nimport (\n\t\"go.opentelemetry.io/otel\"\n\t\"go.opentelemetry.io/otel/attribute\"\n" +
+				"\t\"go.opentelemetry.io/otel/trace/noop\"\n)\n",
+			want: "package a\n\nimport (\n\t\"go.opentelemetry.io/otel/v2\"\n\t\"go.opentelemetry.io/otel/v2/attribute\"\n" +
+				"\t\"go.opentelemetry.io/otel/trace/noop\"\n)\n",
+		},
+	} {
+		for _, m := range []struct {
+			name string
+			mgr  manager.Manager
+		}{{"uncached", New()}, {"indexed", NewCached(NewScanCache())}} {
+			t.Run(tt.name+"/"+m.name, func(t *testing.T) {
+				root := t.TempDir()
+				if err := os.MkdirAll(filepath.Join(root, "mod"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				for p, c := range map[string]string{"mod/go.mod": tt.gomod, "mod/a.go": tt.src} {
+					if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(p)), []byte(c), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				d := dep.Dep{Manager: Name, File: "mod/go.mod", Name: "go.opentelemetry.io/otel", Version: "v1.38.0"}
+				u := dep.Update{Dep: d, Type: dep.Major, NewVersion: "v2.0.0", NewName: "go.opentelemetry.io/otel/v2"}
+				got, err := m.mgr.(manager.FileEditor).FileEdits(root, u)
+				if err != nil {
+					t.Fatal(err)
+				}
+				out, err := patch.Apply([]byte(tt.src), got["mod/a.go"])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(out) != tt.want {
+					t.Errorf("got\n%s\nwant\n%s", out, tt.want)
+				}
+			})
+		}
+	}
+}
+
 // TestReadFile checks that readFile returns what os.ReadFile does, whatever the buffer it is
 // handed, and its errors.
 func TestReadFile(t *testing.T) {
