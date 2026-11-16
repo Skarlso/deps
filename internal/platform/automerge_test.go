@@ -302,6 +302,39 @@ func TestGitHubIssueTitleSearch(t *testing.T) {
 	}
 }
 
+// GitHub answers a search that ran into its query time limit with incomplete_results and the
+// matches it found before, and serves the search from an index that lags behind, so neither
+// an incomplete answer nor an empty one proves the issue does not exist. The caller creates
+// the dashboard it does not find, so both fall back on listing the issues; a second
+// "Dependency Dashboard" issue is worse than a request more.
+func TestGitHubIssueSearchIncomplete(t *testing.T) {
+	const title = "Dependency Dashboard"
+	search := "GET /search/issues?advanced_search=true&per_page=100&q=" +
+		neturl.QueryEscape(`repo:o/r is:issue is:open in:title "`+title+`"`)
+	const listing = "GET /repos/o/r/issues?state=open&sort=created&direction=asc&per_page=100&page=1"
+	for _, tt := range []struct{ name, answer string }{
+		{"timed out", `{"total_count":0,"incomplete_results":true,"items":[]}`},
+		{"index lagging", `{"total_count":0,"incomplete_results":false,"items":[]}`},
+		{"timed out with a match", `{"total_count":1,"incomplete_results":true,"items":[{"number":9,"title":"Dependency Dashboard of another bot"}]}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			srv, calls := routes(t, map[string]route{
+				search:  {body: tt.answer},
+				listing: {body: `[{"number":7,"title":"Dependency Dashboard","body":"b","html_url":"u7"}]`},
+			})
+			c := NewClient(Info{Kind: GitHub, APIURL: srv.URL, Repo: "o/r"}, "tok", srv.Client())
+			is, err := c.ListIssues(t.Context(), 10, IssueFilter{Title: title, Oldest: true})
+			if err != nil || len(is.Issues) != 1 || is.Issues[0].Number != 7 || is.Truncated {
+				t.Fatalf("ListIssues = %+v %v, want the dashboard the listing holds", is, err)
+			}
+			// The listing alone follows the search: nothing is created, nothing else is asked.
+			if got, want := uris(calls()), []string{search, listing}; !slices.Equal(got, want) {
+				t.Errorf("calls %v, want %v", got, want)
+			}
+		})
+	}
+}
+
 func TestGiteaAutoMerge(t *testing.T) {
 	for _, kind := range []Kind{Gitea, Forgejo} {
 		t.Run(string(kind), func(t *testing.T) {
