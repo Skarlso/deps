@@ -16,7 +16,7 @@ var Doc = refdoc.Manager{
 		"Requirements with `--hash` options are updated too: in a file that is not a compiled file deps can re-run, the `--hash` options of each updated requirement are replaced by the sha256 digests of the new version's files on its index, " +
 		"one option per digest in pip-compile's order and line style. `plan` shows the version changes only.",
 	Files: []string{
-		"`requirements.txt`, `requirements-dev.txt`, `requirements.dev.txt`, `dev-requirements.txt`, `requirements.pip` (Renovate's `(^|/)[\\w-]*requirements([-.]\\w+)?\\.(txt|pip)$`)",
+		"`requirements.txt`, `requirements-dev.txt`, `requirements.dev.txt`, `requirements_dev.txt`, `dev-requirements.txt`, `requirements.pip` (Renovate's `(^|/)[\\w-]*requirements([-._]\\w+)?\\.(txt|pip)$`)",
 		"`*.in` pip-compile inputs, only when a compiled file names them (directly or through `-r`); other `.in` files (`MANIFEST.in`, `Makefile.in`) yield no deps",
 	},
 	DepTypes: []refdoc.DepType{

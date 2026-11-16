@@ -1467,7 +1467,7 @@ Updates the PEP 508 requirements of pip requirements files, and of the input fil
 
 **Files:**
 
-- `requirements.txt`, `requirements-dev.txt`, `requirements.dev.txt`, `dev-requirements.txt`, `requirements.pip` (Renovate's `(^|/)[\w-]*requirements([-.]\w+)?\.(txt|pip)$`)
+- `requirements.txt`, `requirements-dev.txt`, `requirements.dev.txt`, `requirements_dev.txt`, `dev-requirements.txt`, `requirements.pip` (Renovate's `(^|/)[\w-]*requirements([-._]\w+)?\.(txt|pip)$`)
 - `*.in` pip-compile inputs, only when a compiled file names them (directly or through `-r`); other `.in` files (`MANIFEST.in`, `Makefile.in`) yield no deps
 
 | Dep type | Extracted | Datasource | Versioning | Default |

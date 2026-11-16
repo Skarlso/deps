@@ -31,7 +31,7 @@ const (
 )
 
 // matchRe is Renovate's default pip_requirements file pattern.
-var matchRe = regexp.MustCompile(`(^|/)[\w-]*requirements([-.]\w+)?\.(txt|pip)$`)
+var matchRe = regexp.MustCompile(`(^|/)[\w-]*requirements([-._]\w+)?\.(txt|pip)$`)
 
 // pipManager rewrites specifiers with pyreq.Ranges and records the compile graph sources of
 // the files Extract sees until Link. outs memoizes the compiled files FileEdits looks up.
@@ -48,7 +48,8 @@ func New() manager.Manager { return &pipManager{outs: NewOutputCache()} }
 func (*pipManager) Name() string { return Name }
 
 // Match reports whether the slash path is a requirements file (`requirements.txt`,
-// `requirements-dev.txt`, `dev-requirements.txt`, `requirements.pip`, …) or a pip-compile
+// `requirements-dev.txt`, `requirements_dev.txt`, `dev-requirements.txt`, `requirements.pip`,
+// …) or a pip-compile
 // input (`*.in`; Link drops the deps of those no compiled file names). The name check skips
 // the regexp for the paths that cannot match.
 func (*pipManager) Match(p string) bool { return match(p) }

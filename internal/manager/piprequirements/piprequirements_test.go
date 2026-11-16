@@ -55,6 +55,8 @@ func TestMatch(t *testing.T) {
 	for p, want := range map[string]bool{
 		"requirements.txt": true, "a/requirements-dev.txt": true, "requirements.dev.txt": true, "dev-requirements.txt": true,
 		"test_requirements.txt": true, "requirements.pip": true, "requirements.in": true, "requirements/base.in": true, "requirements/base.txt": false, "myrequirements.txt.bak": false,
+		// Renovate's pattern separates the suffix with `-`, `.` or `_`.
+		"requirements_dev.txt": true, "requirements_test.txt": true, "ci/requirements_lint.txt": true, "requirements_dev.pip": true,
 	} {
 		if got := New().Match(p); got != want {
 			t.Errorf("Match(%q) = %v", p, got)
