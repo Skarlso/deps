@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -693,8 +694,11 @@ func (l *Lister) getJSON(ctx context.Context, u *url.URL, path string, v any) (f
 }
 
 // getJSONPage GETs path from the Gitea/Forgejo API of repository u into v and returns the
-// answer's Link header, which pages a listing. found is false on 404 or when the body is not
-// JSON (a host without the API may answer with a web page): unknown, not an error.
+// answer's Link header, which pages a listing. found is false on 404 or when a body that does
+// not claim to be JSON does not decode (a host without the API may answer with a web page):
+// unknown, not an error. A body that claims to be JSON and does not decode is an error: a
+// truncated or garbled answer must not pass for a host without the API, whose tags are all
+// dateless and so skip the release age gates.
 func (l *Lister) getJSONPage(ctx context.Context, u *url.URL, path string, v any) (found bool, link string, err error) {
 	_, token, authed := l.auth.Static(u.Hostname())
 	target := u.Scheme + "://" + u.Host + "/api/v1" + path
@@ -723,10 +727,22 @@ func (l *Lister) getJSONPage(ctx context.Context, u *url.URL, path string, v any
 	case resp.StatusCode < 200 || resp.StatusCode > 299:
 		return false, "", httpx.ResponseError(resp)
 	}
-	if json.UnmarshalRead(io.LimitReader(resp.Body, 16<<20), v) != nil {
-		return false, "", nil
+	if derr := json.UnmarshalRead(io.LimitReader(resp.Body, 16<<20), v); derr != nil {
+		if !jsonType(resp.Header.Get("Content-Type")) {
+			return false, "", nil
+		}
+		return false, "", fmt.Errorf("%s: %w", target, derr)
 	}
 	return true, resp.Header.Get("Link"), nil
+}
+
+// jsonType reports whether the Content-Type header value names a JSON media type.
+func jsonType(contentType string) bool {
+	t, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return t == "application/json" || t == "text/json" || strings.HasSuffix(t, "+json")
 }
 
 // get returns the tags of repoURL, or with heads its branches and HEAD, fetching them once.

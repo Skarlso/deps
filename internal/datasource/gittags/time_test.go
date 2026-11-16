@@ -118,6 +118,11 @@ func TestReleaseTime(t *testing.T) {
 			w.WriteHeader(http.StatusForbidden)
 		case "/api/v1/repos/o/web/releases":
 			io.WriteString(w, `<html>not an API</html>`)
+		case "/api/v1/repos/o/garbled/releases":
+			// A 200 that claims to be JSON and is truncated (a proxy error page, a half-written
+			// cache entry): not a host without the API.
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			io.WriteString(w, `[{"tag_name":"v1","published_at":"2026-10-3`)
 		case "/api/v1/repos/o/limited/releases":
 			w.WriteHeader(http.StatusForbidden)
 		default:
@@ -169,6 +174,8 @@ func TestReleaseTime(t *testing.T) {
 		{source: srv.URL + "/o/full", tag: "limited", wantErr: "release limited of o/full: HTTP 403"},
 		{source: srv.URL + "/o/missing", tag: "v1"},
 		{source: srv.URL + "/o/web", tag: "v1"},
+		// A garbled answer of a host that has the API: an error, not a dateless tag.
+		{source: srv.URL + "/o/garbled", tag: "v1", wantErr: "releases of o/garbled: " + srv.URL + "/api/v1/repos/o/garbled/releases?limit=50: "},
 		{source: srv.URL + "/o/limited", tag: "v1", wantErr: "releases of o/limited: HTTP 403"},
 		{source: srv.URL + "/o/limited", tag: "v2", wantErr: "releases of o/limited: HTTP 403"},
 		{source: "::bad", tag: "v1", wantErr: `releases: invalid repository "::bad"`},
@@ -212,6 +219,7 @@ func TestReleaseTime(t *testing.T) {
 		"token gitea-tok /api/v1/repos/o/full/releases/tags/limited",
 		"token gitea-tok /api/v1/repos/o/missing/releases?limit=50",
 		"token gitea-tok /api/v1/repos/o/web/releases?limit=50",
+		"token gitea-tok /api/v1/repos/o/garbled/releases?limit=50",
 		"token gitea-tok /api/v1/repos/o/limited/releases?limit=50",
 	}
 	if !slices.Equal(reqs, want) {
