@@ -251,7 +251,11 @@ func TestScope(t *testing.T) {
 		{"no workspaces", map[string]string{"package.json": `{"name": "x"}`, "package-lock.json": "{}"}, "packages/a/package.json", ""},
 		{"no lock", map[string]string{"package.json": `{"workspaces": ["packages/*"]}`}, "packages/a/package.json", ""},
 		{"nested lock wins", map[string]string{"package.json": `{"workspaces": ["packages/*"]}`, "package-lock.json": "{}", "packages/c/package-lock.json": "{}"}, "packages/c/package.json", "packages/c"},
-		{"nearest lock only", map[string]string{"package.json": `{"workspaces": ["packages/**"]}`, "package-lock.json": "{}", "packages/c/package-lock.json": "{}"}, "packages/c/sub/package.json", ""},
+		// A lockfile that does not claim the manifest leaves the root that does: pnpm installs
+		// apps/legacy/tools as a member of the root workspace whatever apps/legacy locks.
+		{"outer root past a nested lock", map[string]string{"pnpm-workspace.yaml": "packages:\n  - apps/**\n", "pnpm-lock.yaml": "", "apps/legacy/package-lock.json": "{}"}, "apps/legacy/tools/package.json", "."},
+		{"nested lock does not hide the outer one", map[string]string{"package.json": `{"workspaces": ["packages/**"]}`, "package-lock.json": "{}", "packages/c/package-lock.json": "{}"}, "packages/c/sub/package.json", "."},
+		{"no root claims the manifest", map[string]string{"package.json": `{"workspaces": ["packages/*"]}`, "package-lock.json": "{}", "packages/c/package-lock.json": "{}"}, "packages/c/sub/package.json", ""},
 		{"nested workspace", map[string]string{"sub/ws/package.json": `{"workspaces": ["m"]}`, "sub/ws/package-lock.json": "{}"}, "sub/ws/m/package.json", "sub/ws"},
 		{"broken root package.json", map[string]string{"package.json": `{"workspaces": [`, "package-lock.json": "{}"}, "packages/a/package.json", ""},
 		{"unreadable pnpm-workspace.yaml", map[string]string{"pnpm-workspace.yaml/x": "", "pnpm-lock.yaml": ""}, "libs/a/package.json", ""},

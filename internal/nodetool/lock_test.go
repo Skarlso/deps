@@ -653,3 +653,52 @@ func TestProcessLockedEnv(t *testing.T) {
 		t.Errorf("env = %q, want deps= signing= github=gh", got)
 	}
 }
+
+// outerPnpmLock is the lockfile pnpm 10.34.9 writes for the tree of
+// TestReadLockedOuterWorkspaceRoot (`pnpm install --lockfile-only`): apps/legacy/tools is an
+// importer of the root workspace even though apps/legacy holds a package-lock.json of its own.
+const outerPnpmLock = `lockfileVersion: '9.0'
+
+importers:
+
+  .: {}
+
+  apps/legacy: {}
+
+  apps/legacy/tools:
+    dependencies:
+      is-odd:
+        specifier: 3.0.1
+        version: 3.0.1
+
+packages:
+
+  is-odd@3.0.1:
+    resolution: {integrity: sha512-CQpnWPrDwmP1+SMHXZhtLtJv90yiyVfluGsX5iNCVkrhQtU3TQHsUWPG9wkdk9Lgd5yNpAg9jQEo90CBaXgWMA==}
+`
+
+// TestReadLockedOuterWorkspaceRoot locks a manifest that lies below a lockfile claiming none of
+// it: apps/legacy/package-lock.json covers apps/legacy alone, while the pnpm workspace root
+// above installs and locks apps/legacy/tools, so its version comes from the root lockfile.
+func TestReadLockedOuterWorkspaceRoot(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"package.json":                   `{"name": "root", "private": true}`,
+		"pnpm-workspace.yaml":            "packages:\n  - apps/**\n",
+		"pnpm-lock.yaml":                 outerPnpmLock,
+		"apps/legacy/package.json":       `{"name": "legacy"}`,
+		"apps/legacy/package-lock.json":  `{"name": "legacy", "lockfileVersion": 3, "packages": {"": {"name": "legacy"}}}`,
+		"apps/legacy/tools/package.json": `{"name": "tools", "dependencies": {"is-odd": "3.0.1"}}`,
+	})
+	if dir, ok := (Locker{}).Scope(t.Context(), root, "apps/legacy/tools/package.json"); dir != "." || !ok {
+		t.Errorf("Scope = %q, %v, want %q, true", dir, ok, ".")
+	}
+	wants := []Want{{"apps/legacy/tools/package.json", "is-odd", "3.0.1"}}
+	got, errs := ReadLocked(root, wants)
+	if len(errs) != 0 {
+		t.Fatalf("errs = %v", errs)
+	}
+	if want := (LockState{Version: "3.0.1"}); got[0] != want {
+		t.Errorf("ReadLocked = %+v, want %+v", got[0], want)
+	}
+}

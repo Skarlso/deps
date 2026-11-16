@@ -188,10 +188,11 @@ func (w workspaces) members(dir string) ([]string, error) {
 
 // Scope returns the lock root of the package.json manifest (slash paths relative to root): the
 // nearest directory at or above the manifest's, within root, that holds a package-lock.json,
-// pnpm-lock.yaml or yarn.lock. It is accepted when it is the manifest's own directory or when
-// its package.json `workspaces` or pnpm-workspace.yaml `packages` globs match the manifest's
-// directory; otherwise the manifest has no lockfile. The lookups of the Locker's Scopes are
-// cached (none without one).
+// pnpm-lock.yaml or yarn.lock and claims the manifest. A directory claims it when it is the
+// manifest's own, or when its package.json `workspaces` or pnpm-workspace.yaml `packages`
+// globs match the manifest's directory; a lock root that does not is skipped and the search
+// goes on above it. Without such a root the manifest has no lockfile. The lookups of the
+// Locker's Scopes are cached (none without one).
 func (l Locker) Scope(ctx context.Context, root, manifest string) (string, bool) {
 	return l.Scopes.Scope(ctx, root, manifest)
 }
@@ -261,7 +262,11 @@ func (c *scopeCache) readWorkspaces(dir string) (workspaces, error) {
 	return r.ws, r.err
 }
 
-// lockScope is Scope with the lookups cached in c (nil = no caching).
+// lockScope is Scope with the lookups cached in c (nil = no caching). A lock root whose
+// workspace globs do not cover the manifest does not end the walk: the lockfile of a
+// subproject (an npm package-lock.json below a pnpm workspace root, say) says nothing about
+// the directories under it that it does not claim, which the workspace root above it still
+// installs and locks.
 func lockScope(ctx context.Context, root, manifest string, c *scopeCache) (string, bool) {
 	member := path.Dir(manifest)
 	for dir := member; ; dir = path.Dir(dir) {
@@ -274,16 +279,14 @@ func lockScope(ctx context.Context, root, manifest string, c *scopeCache) (strin
 			if dir != "." {
 				rel = strings.TrimPrefix(member, dir+"/")
 			}
-			ws, err := c.readWorkspaces(abs)
-			if err != nil {
+			switch ws, err := c.readWorkspaces(abs); {
+			case err != nil:
 				slog.DebugContext(ctx, "workspace root unreadable", "dir", dir, "manifest", manifest, "err", err)
-				return "", false
-			}
-			if ws.match(rel) {
+			case ws.match(rel):
 				return dir, true
+			default:
+				slog.DebugContext(ctx, "not a workspace member", "dir", dir, "manifest", manifest)
 			}
-			slog.DebugContext(ctx, "not a workspace member", "dir", dir, "manifest", manifest)
-			return "", false
 		}
 		if dir == "." {
 			return "", false
