@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestMemoDedupesConcurrentCallers(t *testing.T) {
@@ -134,6 +135,45 @@ func TestOnceWaiterRetriesCanceledLookup(t *testing.T) {
 	}
 	if v, _ := o.Do(t.Context(), func() (int, error) { return 0, errors.New("ran again") }); v != 42 {
 		t.Errorf("after = %d, want the shared 42", v)
+	}
+}
+
+// A caller waiting for another's lookup gives up as soon as its own context ends, instead of
+// blocking on the running lookup's retries and backoff.
+func TestOnceWaiterStopsWithItsContext(t *testing.T) {
+	var o Once[int]
+	release, running := make(chan struct{}), make(chan struct{})
+	first := make(chan error, 1)
+	go func() {
+		_, err := o.Do(t.Context(), func() (int, error) {
+			close(running)
+			<-release
+			return 42, nil
+		})
+		first <- err
+	}()
+	<-running
+	ctx, cancel := context.WithCancel(t.Context())
+	waited := make(chan error, 1)
+	go func() {
+		_, err := o.Do(ctx, func() (int, error) { return 0, errors.New("a waiter must not look up itself") })
+		waited <- err
+	}()
+	cancel()
+	select {
+	case err := <-waited:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("waiter err = %v, want context.Canceled", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Error("the waiter is still blocked on the running lookup")
+	}
+	close(release)
+	if err := <-first; err != nil {
+		t.Errorf("first err = %v", err)
+	}
+	if v, err := o.Do(t.Context(), func() (int, error) { return 0, errors.New("ran again") }); v != 42 || err != nil {
+		t.Errorf("after = %d, %v, want the shared 42", v, err)
 	}
 }
 
