@@ -24,16 +24,18 @@ import (
 )
 
 // proxyServer serves "/<name>/<module>/@v/list": "ok" proxies answer with a list, "nf" with 404,
-// "gone" with 410 and "err" with 500. hits counts requests per proxy name.
+// "gone" with 410 and "err" with 500. hits counts list requests per proxy name; every other
+// endpoint (a retraction lookup's `.mod`) is a 404 and is not counted.
 func proxyServer(t *testing.T, hits map[string]*atomic.Int32) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
+		if !strings.HasSuffix(rest, "/@v/list") {
+			http.NotFound(w, r)
+			return
+		}
 		if c := hits[name]; c != nil {
 			c.Add(1)
-		}
-		if !strings.HasSuffix(rest, "/@v/list") {
-			t.Errorf("unexpected path %s", r.URL.Path)
 		}
 		switch name {
 		case "ok":
@@ -189,6 +191,8 @@ func TestReleasesPackagePath(t *testing.T) {
 			io.WriteString(w, `{"Version":"v2.6.0","Time":"2026-10-30T12:00:00Z"}`)
 		case "/p/example.com/empty/@v/list":
 			lists = append(lists, r.URL.Path)
+		case "/p/github.com/golangci/golangci-lint/v2/@v/v2.6.0.mod": // retractions: none
+			io.WriteString(w, "module github.com/golangci/golangci-lint/v2\n")
 		default:
 			lists = append(lists, r.URL.Path)
 			http.NotFound(w, r)
@@ -722,7 +726,11 @@ func TestMajorPathsReuseLookup(t *testing.T) {
 	hits := map[string]int{}
 	first, unblock := make(chan struct{}), make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mod, _ := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/p/"), "/@v/list")
+		mod, isList := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/p/"), "/@v/list")
+		if !isList { // a retraction lookup's .mod: no retractions
+			io.WriteString(w, "module example.com/m\n")
+			return
+		}
 		mu.Lock()
 		hits[mod]++
 		n := hits[mod]
@@ -976,5 +984,44 @@ func TestMajorPathsProxiesFail(t *testing.T) {
 	}
 	if hits["err"].Load() != 1 || hits["nf"].Load() != 1 {
 		t.Errorf("hits: err %d, nf %d; want 1, 1 (both entries tried)", hits["err"].Load(), hits["nf"].Load())
+	}
+}
+
+// TestVersionsRetracted: the `@v/list` of a proxy holds retracted versions, which the go
+// command hides; they must not be offered (hashicorp/consul/api retracts v1.29.5).
+func TestVersionsRetracted(t *testing.T) {
+	mod := "module example.com/m\n\ngo 1.24\n\nretract v1.4.0 // bad release\n\nretract (\n\tv1.6.0 // cut from the wrong branch\n\t[v1.2.0, v1.3.0] // broken range\n)\n"
+	var modHits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/example.com/m/@v/list":
+			io.WriteString(w, "v1.1.0\nv1.2.0\nv1.3.0\nv1.4.0\nv1.5.0\nv1.6.0\n")
+		case "/example.com/m/@v/v1.6.0.mod": // the highest version holds the retractions
+			modHits.Add(1)
+			io.WriteString(w, mod)
+		case "/example.com/broken/@v/list":
+			io.WriteString(w, "v1.0.0\nv1.1.0\n")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	s := New(srv.Client(), nil)
+	s.env = func(context.Context) (gotool.GoEnv, error) { return gotool.GoEnv{Proxy: srv.URL}, nil }
+
+	got, err := s.Versions(t.Context(), "example.com/m", "")
+	if err != nil {
+		t.Fatalf("Versions: %v", err)
+	}
+	if want := []string{"v1.1.0", "v1.5.0"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Versions = %v; want %v", got, want)
+	}
+	if modHits.Load() != 1 {
+		t.Errorf("%d .mod requests; want 1", modHits.Load())
+	}
+	// An unreadable go.mod leaves the listed versions alone.
+	got, err = s.Versions(t.Context(), "example.com/broken", "")
+	if err != nil || !reflect.DeepEqual(got, []string{"v1.0.0", "v1.1.0"}) {
+		t.Errorf("Versions(broken) = %v, %v; want all versions", got, err)
 	}
 }

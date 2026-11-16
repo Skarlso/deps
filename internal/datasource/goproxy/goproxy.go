@@ -526,6 +526,9 @@ func (s *Source) loadEnv(ctx context.Context) (gotool.GoEnv, error) {
 	})
 }
 
+// resolve lists modPath's versions. The `@v/list` of a proxy holds retracted versions, which
+// the go command hides (`go list -m -versions` of the direct path does), so they are dropped
+// here as well; nothing downstream knows about retractions.
 func (s *Source) resolve(ctx context.Context, modPath, dir string) (vs []string, proxied bool, err error) {
 	err = s.walk(ctx, modPath, func(base, escaped string) (notFound bool, err error) {
 		if base == "" {
@@ -535,12 +538,83 @@ func (s *Source) resolve(ctx context.Context, modPath, dir string) (vs []string,
 			if err != nil && !notFound {
 				err = proxyFailure{err}
 			}
+			if err == nil {
+				vs = s.dropRetracted(ctx, modPath, base, escaped, vs)
+			}
 		}
 		proxied = base != ""
 		slog.DebugContext(ctx, "module versions", "module", modPath, "source", cmp.Or(base, "direct"), "versions", len(vs), "err", err)
 		return notFound, err
 	})
 	return vs, proxied, err
+}
+
+// dropRetracted returns the versions of vs that the module does not retract. The retractions
+// of a module are read from the go.mod of its highest version, retracted versions included,
+// as the go command does; that `@v/<version>.mod` comes from the module download cache when
+// the go command already fetched it (see cached), else from base. A .mod that cannot be
+// fetched or parsed only leaves a retracted version offered, so it is logged like the other
+// per-version proxy reads and vs is returned unchanged.
+func (s *Source) dropRetracted(ctx context.Context, modPath, base, escaped string, vs []string) []string {
+	var top string
+	for _, v := range vs {
+		if semver.IsValid(v) && semver.Compare(v, top) > 0 {
+			top = v
+		}
+	}
+	if top == "" {
+		return vs
+	}
+	b, err := s.modBytes(ctx, modPath, base, escaped, top)
+	if err == nil {
+		var f *modfile.File
+		if f, err = modfile.Parse("go.mod", b, nil); err == nil {
+			if len(f.Retract) == 0 {
+				return vs
+			}
+			kept := make([]string, 0, len(vs))
+			for _, v := range vs {
+				if !retracted(f.Retract, v) {
+					kept = append(kept, v)
+				}
+			}
+			slog.DebugContext(ctx, "module retractions", "module", modPath, "from", top, "retracted", len(vs)-len(kept))
+			return kept
+		}
+	}
+	slog.DebugContext(ctx, "module retractions unknown", "module", modPath, "from", top, "err", err)
+	return vs
+}
+
+// retracted reports whether a retract directive covers version: a single version is the
+// interval [v, v], a range is [low, high], both bounds included.
+func retracted(rs []*modfile.Retract, version string) bool {
+	for _, r := range rs {
+		if semver.Compare(r.Low, version) <= 0 && semver.Compare(version, r.High) <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// modBytes reads a version's `@v/<version>.mod` from the module download cache, else from the
+// proxy base, whose module path is escaped.
+func (s *Source) modBytes(ctx context.Context, modPath, base, escaped, version string) ([]byte, error) {
+	escVersion, err := module.EscapeVersion(version)
+	if err != nil {
+		return nil, err
+	}
+	if b, ok := s.cached(ctx, modPath, escVersion+".mod"); ok {
+		return b, nil
+	}
+	var b []byte
+	if _, err := s.stream(ctx, base+"/"+escaped+"/@v/"+escVersion+".mod", maxMod, func(r io.Reader) (err error) {
+		b, err = io.ReadAll(r)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 // errProxyFailed marks a GOPROXY URL that neither listed a module's versions nor reported the
