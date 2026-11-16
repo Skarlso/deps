@@ -28,10 +28,11 @@ type regexVersion struct {
 }
 
 // newRegexScheme compiles Renovate's regex versioning: expr must match the whole version
-// (anchor it) and name its parts with the groups major (required), minor, patch, build,
-// revision (numeric), prerelease and compatibility. Go's regexp accepts both (?P<name>...)
-// and Renovate's (?<name>...) group syntax, so expressions from renovate.json5 work as they
-// are. Other named groups are rejected so a typo does not silently read as 0.
+// (anchor it) and name its parts with the groups major, minor, patch, build, revision
+// (numeric), prerelease and compatibility. At least one of major, minor and patch must be
+// named, as Renovate requires. Go's regexp accepts both (?P<name>...) and Renovate's
+// (?<name>...) group syntax, so expressions from renovate.json5 work as they are. Other
+// named groups are rejected so a typo does not silently read as 0.
 func newRegexScheme(expr string) (Scheme, error) {
 	re, err := regexp.Compile(expr)
 	if err != nil {
@@ -41,8 +42,8 @@ func newRegexScheme(expr string) (Scheme, error) {
 	for i, g := range regexNumGroups {
 		idx[i] = re.SubexpIndex(g)
 	}
-	if idx[0] < 0 {
-		return nil, errors.New("regex: must have a (?<major>...) group")
+	if idx[0] < 0 && idx[1] < 0 && idx[2] < 0 {
+		return nil, errors.New("regex: must have a (?<major>...), (?<minor>...) or (?<patch>...) group")
 	}
 	for _, n := range re.SubexpNames() {
 		if n != "" && !slices.Contains(regexGroups, n) {

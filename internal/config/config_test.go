@@ -198,7 +198,7 @@ func TestLoadErrors(t *testing.T) {
 		{"rules: [{versioning: calver}]\n", `rules[0].versioning: must be one of tag, go, docker, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api or regex:<RE2>, got "calver"`},
 		{"rules: [{versioning: semvr}]\n", `rules[0].versioning: must be one of tag, go, docker, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api or regex:<RE2>, got "semvr" (did you mean semver?)`},
 		{"rules: [{versioning: 'regex:('}]\n", "rules[0].versioning: regex: invalid RE2 regexp"},
-		{"rules: [{versioning: 'regex:^(?<minor>\\d+)$'}]\n", "rules[0].versioning: regex: must have a (?<major>...) group"},
+		{"rules: [{versioning: 'regex:^(?<build>\\d+)$'}]\n", "rules[0].versioning: regex: must have a (?<major>...), (?<minor>...) or (?<patch>...) group"},
 		{"rules: [{versioning: 'regex:^(?<major>\\d+)(?P<mjor>x)$'}]\n", `rules[0].versioning: regex: unknown group "mjor" (allowed: major, minor, patch, build, revision, prerelease, compatibility)`},
 		{"rules: [{updateTypes: [major], versioning: loose}]\n", "rules[0].versioning: cannot be combined with updateTypes"},
 		{"rules: [{allow: '/(/'}]\n", `rules[0].allow: invalid regex "/(/"`},

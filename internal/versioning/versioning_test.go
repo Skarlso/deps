@@ -277,6 +277,28 @@ func TestRegexBest(t *testing.T) {
 		{"1.0.0.5", "1.0.0.5.2", []string{"1.0.0.5.2", "1.0.0.5.1", "1.0.0.4.9"}, nil},
 		{"1.0.0.5", "1.0.0.10", []string{"1.0.0.9", "1.0.0.10", "1.0.0.99999999999999999999"}, nil},
 	})
+	// Renovate's regex versioning needs one of major, minor and patch, not major itself
+	// (lib/modules/versioning/regex/index.ts), so a scheme without a major group works:
+	// an absent group reads as 0, which makes every change here a minor or patch update.
+	mp := `regex:^(?<minor>\d+)\.(?<patch>\d+)$`
+	runBest(t, mp, []bestCase{
+		{"1.2", "3.0", []string{"1.3", "3.0", "0.9", "x"}, nil},
+		{"1.2", "1.3", []string{"1.3", "3.0"}, func(v string) bool { return !strings.HasPrefix(v, "3") }},
+	})
+	s := get(t, mp)
+	if s.Compare("1.3", "1.2") <= 0 || s.Compare("0.9", "1.0") >= 0 || s.Compare("1.2", "1.2") != 0 {
+		t.Errorf("minor/patch scheme Compare: %d %d %d", s.Compare("1.3", "1.2"), s.Compare("0.9", "1.0"), s.Compare("1.2", "1.2"))
+	}
+	if k := s.Kind("1.2", "3.0"); k != dep.Minor {
+		t.Errorf("Kind(1.2, 3.0) = %s, want minor", k)
+	}
+	if k := s.Kind("1.2", "1.3"); k != dep.Patch {
+		t.Errorf("Kind(1.2, 1.3) = %s, want patch", k)
+	}
+	// A patch-only scheme is accepted as well; a major-less one has major 0.
+	if p := get(t, `regex:^r(?<patch>\d+)$`); p.Compare("r10", "r9") <= 0 || !p.Valid("r3") {
+		t.Error("patch-only scheme")
+	}
 }
 
 func TestNewSchemesRejectReasons(t *testing.T) {
@@ -410,7 +432,7 @@ func TestParseScheme(t *testing.T) {
 	for in, want := range map[string]string{
 		"calver":                      `must be one of tag, go, docker, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api or regex:<RE2>, got "calver"`,
 		"regex:(":                     "regex: invalid RE2 regexp: error parsing regexp",
-		`regex:^(?<minor>\d+)$`:       "regex: must have a (?<major>...) group",
+		`regex:^(?<build>\d+)$`:       "regex: must have a (?<major>...), (?<minor>...) or (?<patch>...) group",
 		`regex:(?<major>\d)(?<x>\d)`:  `regex: unknown group "x" (allowed: major, minor, patch, build, revision, prerelease, compatibility)`,
 		`regex:(?<major>\d)(?<x>\d)x`: `regex: unknown group "x"`,
 		"Regex:(?<major>1)":           `got "Regex:(?<major>1)"`,

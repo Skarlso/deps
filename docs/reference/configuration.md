@@ -1555,7 +1555,7 @@ When no rule sets it, all five update types are allowed, except `major` for [tra
 
 ### `rules[].versioning`
 
-Versioning scheme overriding the manager's: tag, go, docker, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api, or regex:\<RE2> with named groups major (required), minor, patch, build, revision, prerelease and compatibility; (?\<name>) and (?P\<name>) syntax both work. Cannot be combined with updateTypes.
+Versioning scheme overriding the manager's: tag, go, docker, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api, or regex:\<RE2> with named groups major, minor, patch, build, revision, prerelease and compatibility, at least one of major, minor and patch; (?\<name>) and (?P\<name>) syntax both work. Cannot be combined with updateTypes.
 
 - **Type:** string
 - **Pattern:** `^(tag|go|docker|semver|loose|cargo|pep440|hashicorp|maven|ivy|ruby|conda|composer|julia|bazel-module|nuget|rpm|apk|deb|pub|hex|nixpkgs|glasskube|kubernetes-api|regex:.+)$`
@@ -1584,9 +1584,9 @@ The scheme validates the current value, ranks candidates, classifies update kind
 | `hex` | SemVer 2.0 as Elixir's `Version` parses it: `MAJOR.MINOR.PATCH`, optional `-<prerelease>` and `+<build>`; no `v` prefix, no partial versions | ordered as SemVer 2.0 (the build is ignored); update types follow the three parts; prereleases only from a prerelease. Ranges are Elixir requirements (`~> 1.7`, `>= 1.0.0 and < 2.0.0`, `~> 1.0 or ~> 2.0`, `== 1.2.3`); a prerelease only satisfies an alternative naming one, as Hex resolves. The default of the mix and gleam managers |
 | `nixpkgs` | branches of NixOS/nixpkgs, as Renovate's `nixpkgs`: `^(nixos\|nixpkgs\|release)-(YY.MM\|unstable)(-(small\|aarch64\|darwin))?$` (`nixos-24.05`, `nixpkgs-24.05-darwin`, `release-24.11`, `nixos-unstable`) | candidates need the same prefix and suffix; releases ordered by year and month, `unstable` above every release but never proposed from one. A new year is `major` (`nixos-24.11` → `nixos-25.05`), a new month `minor`. A `git-refs` dep under it gets the repository's branches as candidates instead of its tags. No ranges. The default of the nix manager's NixOS/nixpkgs branches and release channels |
 | `glasskube` | Glasskube package versions: SemVer with an optional `v` and the package revision as the first build identifier (`v1.17.0+2`) | ordered as Renovate's: major, minor, patch, then the revision (absent = 0: `v1.17.0` < `v1.17.0+1` < `v1.17.0+2` < `v1.17.1+1`), then a prerelease below none; a new revision is a patch update; prereleases only from a prerelease. No ranges. The default of the glasskube manager and of `glasskube-packages` deps |
-| `regex:<RE2>` | the expression's named groups | `major` (required), `minor`, `patch`, `build`, `revision` (numeric, absent = 0), `prerelease`, `compatibility`; other names are errors. `(?<name>)` and `(?P<name>)` both work. Candidates must share `compatibility`. |
+| `regex:<RE2>` | the expression's named groups | `major`, `minor`, `patch`, `build`, `revision` (numeric, absent = 0), `prerelease`, `compatibility`; at least one of `major`, `minor` and `patch` is required, other names are errors. `(?<name>)` and `(?P<name>)` both work. Candidates must share `compatibility`. |
 
-Errors: `rules[i].versioning: regex: must have a (?<major>...) group`, `regex: unknown group "x" (allowed: ...)`, `regex: invalid RE2 regexp: ...`, and `cannot be combined with updateTypes: ...`.
+Errors: `rules[i].versioning: regex: must have a (?<major>...), (?<minor>...) or (?<patch>...) group`, `regex: unknown group "x" (allowed: ...)`, `regex: invalid RE2 regexp: ...`, and `cannot be combined with updateTypes: ...`.
 
 ```yaml
 rules:
