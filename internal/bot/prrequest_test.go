@@ -1,10 +1,12 @@
 package bot
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
 
+	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/dep"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/engine"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/platform"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/schedule"
@@ -55,6 +57,61 @@ func TestPRBodyRebaseCheckbox(t *testing.T) {
 	ticked := strings.Replace(body, "- [ ] <!-- deps:rebase -->", "- [x] <!-- deps:rebase -->", 1)
 	if !rebaseTicked(ticked) || bodyFingerprint(ticked) != "abc" || bodyInput(ticked) != "def" || untickRebase(ticked) != body {
 		t.Errorf("ticked body:\n%s", ticked)
+	}
+}
+
+// quotingNotes answers release notes that quote the body of another deps pull request, as a
+// dependency whose changelog shows one does (deps' own releases, for one): the markers land
+// in the body verbatim, above the PR's own.
+type quotingNotes struct{ fakeNotes }
+
+func (*quotingNotes) Section(_ context.Context, ups []dep.Update) string {
+	return "### Release notes\n\n<details>\n<summary>Release notes: " + ups[0].Dep.Name + "</summary>\n\n" +
+		"The pull request bodies now end with:\n\n" +
+		"- [x] <!-- deps:rebase --> If you want to rebase/retry this PR, check this box\n\n" +
+		"<!-- deps:fingerprint=0000000000000000 -->\n" +
+		"<!-- deps:versions=quoted%2Fdep=v9.9.9 -->\n" +
+		"<!-- deps:input=1111111111111111 -->\n\n</details>\n"
+}
+
+// Markers above the PR's own, quoted by release notes or written by the configured header
+// and footer, are not the PR's: read instead of the real ones they would rebuild and
+// force-push the PR on every run (fingerprint and input), suppress it against versions it
+// never proposed (versions) or rebase it unasked (the checkbox).
+func TestBodyMarkersQuotedAbove(t *testing.T) {
+	u := dep.Update{Dep: dep.Dep{File: "go.mod", Line: 3, Name: "a/x", Version: "v1.0.0"}, Type: dep.Major, NewVersion: "v2.0.0"}
+	grp := engine.Group{
+		Updates: []dep.Update{u},
+		Header:  "<!-- deps:fingerprint=2222222222222222 -->",
+		Footer:  "<!-- deps:input=3333333333333333 -->",
+	}
+	body := prBody(t.Context(), Options{Notes: &quotingNotes{}}, grp, "abc123", "def456")
+	if got := bodyFingerprint(body); got != "abc123" {
+		t.Errorf("bodyFingerprint = %q, want %q:\n%s", got, "abc123", body)
+	}
+	if got := bodyInput(body); got != "def456" {
+		t.Errorf("bodyInput = %q, want %q:\n%s", got, "def456", body)
+	}
+	vs := bodyVersions(body)
+	if len(vs) != 1 || len(vs["a/x"]) != 1 || vs["a/x"][0] != (target{version: "v2.0.0"}) {
+		t.Errorf("bodyVersions = %v, want a/x=v2.0.0 only:\n%s", vs, body)
+	}
+	if rebaseTicked(body) {
+		t.Errorf("a quoted ticked checkbox reads as a rebase request:\n%s", body)
+	}
+	// Ticking the PR's own box is a rebase request; unticking it after the rebase leaves
+	// the quoted one alone, so the body is otherwise unchanged.
+	ticked := strings.Replace(body, rebaseCheckbox, strings.Replace(rebaseCheckbox, "[ ]", "[x]", 1), 1)
+	if !rebaseTicked(ticked) {
+		t.Errorf("ticked checkbox not read:\n%s", ticked)
+	}
+	if got := untickRebase(ticked); got != body {
+		t.Errorf("untickRebase = %q, want the original body", got)
+	}
+	// withInput replaces the PR's marker, not the quoted one.
+	if got := withInput(body, "fed654"); bodyInput(got) != "fed654" ||
+		!strings.Contains(got, "<!-- deps:input=1111111111111111 -->") {
+		t.Errorf("withInput rewrote the quoted marker:\n%s", got)
 	}
 }
 

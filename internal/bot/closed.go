@@ -53,15 +53,16 @@ func versionsMarker(ups []dep.Update) string {
 // target is a dependency's new version and digest ("" = none) in a versions marker.
 type target struct{ version, digest string }
 
-// bodyVersions returns the targets recorded by the versions marker of body, by dependency
-// name; nil without a marker.
+// bodyVersions returns the targets recorded by the last versions marker of body, by
+// dependency name; nil without a marker. One quoted above it, in release notes or in the
+// configured header or footer, is not the PR's (lastMarker).
 func bodyVersions(body string) map[string][]target {
-	m := versionsRe.FindStringSubmatch(body)
+	m := lastMarker(versionsRe, body)
 	if m == nil {
 		return nil
 	}
 	out := map[string][]target{}
-	for e := range strings.SplitSeq(m[1], " ") {
+	for e := range strings.SplitSeq(body[m[2]:m[3]], " ") {
 		k, v, ok := strings.Cut(e, "=")
 		v, d, _ := strings.Cut(v, "@")
 		name, errK := url.QueryUnescape(k)

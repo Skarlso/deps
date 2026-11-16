@@ -178,21 +178,24 @@ func reusable(o Options, pr platform.PR, input string, f force) bool {
 	return input != "" && !f.rebase && !conflicted && bodyFingerprint(pr.Body) != "" && bodyInput(pr.Body) == input
 }
 
+// bodyInput returns the input fingerprint recorded by body's last input marker ("" = none);
+// one quoted above it is not the PR's (lastMarker).
 func bodyInput(body string) string {
-	if m := inputRe.FindStringSubmatch(body); m != nil {
-		return m[1]
+	if m := lastMarker(inputRe, body); m != nil {
+		return body[m[2]:m[3]]
 	}
 	return ""
 }
 
 // withInput returns body with its input fingerprint marker set to input: replaced, else
-// added after the content fingerprint marker, else appended.
+// added after the content fingerprint marker, else appended. Both markers are the last of
+// their kind in body (lastMarker).
 func withInput(body, input string) string {
 	marker := "<!-- deps:input=" + input + " -->"
-	if loc := inputRe.FindStringIndex(body); loc != nil {
+	if loc := lastMarker(inputRe, body); loc != nil {
 		return body[:loc[0]] + marker + body[loc[1]:]
 	}
-	if loc := fingerprintRe.FindStringIndex(body); loc != nil {
+	if loc := lastMarker(fingerprintRe, body); loc != nil {
 		return body[:loc[1]] + "\n" + marker + body[loc[1]:]
 	}
 	return strings.TrimRight(body, "\n") + "\n\n" + marker + "\n"

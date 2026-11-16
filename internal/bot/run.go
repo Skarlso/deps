@@ -186,19 +186,43 @@ func (a Action) Display() string {
 
 var fingerprintRe = regexp.MustCompile(`<!-- deps:fingerprint=([0-9a-f]+) -->`)
 
+// lastMarker returns the submatch index pairs of the last match of re in body, nil without
+// one. Every marker of a PR body is read from the end: prTail writes the real ones below
+// everything else, while what stands above them is not deps' own text. Release notes quote
+// the bodies of other pull requests (deps' own releases, for one), and the configured header
+// and footer are free text, so either may carry a marker, and that one must not win.
+func lastMarker(re *regexp.Regexp, body string) []int {
+	ms := re.FindAllStringSubmatchIndex(body, -1)
+	if len(ms) == 0 {
+		return nil
+	}
+	return ms[len(ms)-1]
+}
+
 // rebaseCheckbox ends every PR body above the markers; ticking it makes the next run rebase
 // the PR like the dashboard's rebase checkbox. The content fingerprint does not cover the
 // body, so ticking it changes nothing else.
 const rebaseCheckbox = "- [ ] <!-- deps:rebase --> If you want to rebase/retry this PR, check this box"
 
-// rebaseTickedRe finds a ticked rebaseCheckbox: "- [x] <!-- deps:rebase -->".
-var rebaseTickedRe = regexp.MustCompile(`(?m)^(\s*[-*] )\[[xX]\]( <!-- deps:rebase -->)`)
+// rebaseBoxRe finds a rebaseCheckbox in either state, "- [ ] <!-- deps:rebase -->" or
+// "- [x] <!-- deps:rebase -->"; the second group is the box, ticked when it is not a space.
+var rebaseBoxRe = regexp.MustCompile(`(?m)^(\s*[-*] )\[([ xX])\]( <!-- deps:rebase -->)`)
 
-// rebaseTicked reports whether body has its rebase checkbox ticked.
-func rebaseTicked(body string) bool { return rebaseTickedRe.MatchString(body) }
+// rebaseTicked reports whether body has its rebase checkbox ticked; a checkbox quoted above
+// it (in release notes, the header or the footer) is not the PR's (lastMarker).
+func rebaseTicked(body string) bool {
+	m := lastMarker(rebaseBoxRe, body)
+	return len(m) != 0 && body[m[4]:m[5]] != " "
+}
 
-// untickRebase returns body with its rebase checkbox unticked.
-func untickRebase(body string) string { return rebaseTickedRe.ReplaceAllString(body, "${1}[ ]${2}") }
+// untickRebase returns body with its rebase checkbox unticked, leaving quoted ones alone.
+func untickRebase(body string) string {
+	m := lastMarker(rebaseBoxRe, body)
+	if len(m) == 0 || body[m[4]:m[5]] == " " {
+		return body
+	}
+	return body[:m[4]] + " " + body[m[5]:]
+}
 
 // Base is one base branch of a run: the checkout of its tip and the updates resolved there.
 type Base struct {
@@ -1376,9 +1400,11 @@ func fingerprint(changes []engine.FileChange) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
+// bodyFingerprint returns the content fingerprint recorded by body's last fingerprint marker
+// ("" = none); one quoted above it is not the PR's (lastMarker).
 func bodyFingerprint(body string) string {
-	if m := fingerprintRe.FindStringSubmatch(body); m != nil {
-		return m[1]
+	if m := lastMarker(fingerprintRe, body); m != nil {
+		return body[m[2]:m[3]]
 	}
 	return ""
 }
