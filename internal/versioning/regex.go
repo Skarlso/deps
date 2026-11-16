@@ -92,7 +92,7 @@ func regexCompat(cur, next regexVersion) string {
 }
 
 // compareRegex orders major, minor, patch, build and revision numerically, then a release
-// above its prereleases and prereleases by their identifiers.
+// above its prereleases and prereleases as Renovate's generic versioning compares them.
 func compareRegex(a, b regexVersion) int {
 	for i := range a.nums {
 		if a.nums[i] != b.nums[i] {
@@ -102,7 +102,7 @@ func compareRegex(a, b regexVersion) int {
 			return 1
 		}
 	}
-	return comparePrerelease(a.pre, b.pre)
+	return compareSuffixNumeric(a.pre, b.pre)
 }
 
 // regexKind classifies by group: major, minor, else patch (also for build, revision and

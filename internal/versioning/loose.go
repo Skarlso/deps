@@ -83,8 +83,8 @@ func looseCompat(cur, next looseVersion) string {
 }
 
 // compareLoose orders the parts numerically (a missing part counts as 0), then a release
-// above its prereleases, prereleases by their dot-separated identifiers, and finally fewer
-// parts below more (1.2 < 1.2.0) so the order is total.
+// above its prereleases, prereleases as Renovate's loose versioning compares their suffixes,
+// and finally fewer parts below more (1.2 < 1.2.0) so the order is total.
 func compareLoose(a, b looseVersion) int {
 	for i := range maxLooseParts {
 		if a.parts[i] != b.parts[i] {
@@ -94,10 +94,49 @@ func compareLoose(a, b looseVersion) int {
 			return 1
 		}
 	}
-	if c := comparePrerelease(a.suffix, b.suffix); c != 0 {
+	if c := compareSuffixNumeric(a.suffix, b.suffix); c != 0 {
 		return c
 	}
 	return a.n - b.n
+}
+
+// compareSuffixNumeric orders prerelease text as Renovate's loose and generic versioning do
+// with localeCompare(…, {numeric: true}): "" (a release) is highest, runs of digits compare by
+// value (rc9 below rc10, which a bytewise comparison gets wrong) and the rest case-insensitively
+// (Beta next to beta), with the byte order breaking a tie so the order stays total.
+func compareSuffixNumeric(x, y string) int {
+	switch {
+	case x == y:
+		return 0
+	case x == "":
+		return 1
+	case y == "":
+		return -1
+	}
+	for i, j := 0, 0; i < len(x) && j < len(y); {
+		if isDigit(x[i]) && isDigit(y[j]) {
+			p, q := i, j
+			for i < len(x) && isDigit(x[i]) {
+				i++
+			}
+			for j < len(y) && isDigit(y[j]) {
+				j++
+			}
+			// Leading zeros do not change the value, only the tie broken below.
+			if c := compareNum(strings.TrimLeft(x[p:i], "0"), strings.TrimLeft(y[q:j], "0")); c != 0 {
+				return c
+			}
+			continue
+		}
+		if a, b := lowerASCII(x[i]), lowerASCII(y[j]); a != b {
+			if a < b {
+				return -1
+			}
+			return 1
+		}
+		i, j = i+1, j+1
+	}
+	return strings.Compare(x, y)
 }
 
 // looseKind classifies by position: part 0 major, part 1 minor, any later part or the
@@ -118,45 +157,3 @@ func (l looseVersion) semver() *msemver.Version {
 }
 
 func (l looseVersion) major() string { return strconv.Itoa(l.parts[0]) }
-
-// comparePrerelease orders prerelease identifiers without a leading separator by semver
-// precedence: "" (a release) is highest, dot-separated identifiers compare numerically when
-// both are numbers, numbers sort below words, and a shorter list of equal identifiers is lower.
-func comparePrerelease(x, y string) int {
-	switch {
-	case x == y:
-		return 0
-	case x == "":
-		return 1
-	case y == "":
-		return -1
-	}
-	for {
-		dx, rx, okx := strings.Cut(x, ".")
-		dy, ry, oky := strings.Cut(y, ".")
-		if dx != dy {
-			nx, ny := isNum(dx), isNum(dy)
-			switch {
-			case nx && ny:
-				if c := compareNum(strings.TrimLeft(dx, "0"), strings.TrimLeft(dy, "0")); c != 0 {
-					return c
-				}
-				return strings.Compare(dx, dy)
-			case nx:
-				return -1
-			case ny:
-				return 1
-			}
-			return strings.Compare(dx, dy)
-		}
-		switch {
-		case !okx && !oky:
-			return 0
-		case !okx:
-			return -1
-		case !oky:
-			return 1
-		}
-		x, y = rx, ry
-	}
-}

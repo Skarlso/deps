@@ -35,6 +35,8 @@ func TestHashicorpBest(t *testing.T) {
 		{"1.0", "", []string{"junk", "1.0.5"}, nil},                             // invalid candidates
 		{"1.0.0", "1.1.0", []string{"1.1.0", "1.1"}, nil},                       // fewer parts than cur rank below
 		{"1.0", "1.1", []string{"1.1.0-beta", "1.1.0", "1.1.1", "v1.1.3"}, nil}, // duplicates once
+		// go-version compares rc9 and rc10 as words, so rc10 is not an update of rc9.
+		{"1.0.0-rc9", "", []string{"1.0.0-rc10"}, nil},
 	})
 }
 

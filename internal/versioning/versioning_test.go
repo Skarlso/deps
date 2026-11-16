@@ -249,6 +249,7 @@ func TestLooseBest(t *testing.T) {
 		{"1878.0-rc0", "1878.0-rc1", gl, nil},
 		{"v1.2.3.4.5.6", "v1.2.3.4.5.7", []string{"v1.2.3.4.5.7", "1.2.3.4.5.8", "v1.2.3.4.5.6.7"}, nil},
 		{"2.0_beta.2", "2.0_beta.10", []string{"2.0_beta.10", "2.0_beta.9"}, nil},
+		{"2.0-rc9", "2.0-rc10", []string{"2.0-rc10", "2.0-rc8"}, nil}, // rc10 is newer than rc9
 		// 1.2.0 is 1.2 written with a part more, no update; 1.2.0.1 is one.
 		{"1.2", "", []string{"1.2.0", "1.2.0.0"}, nil},
 		{"1.2", "1.2.0.1", []string{"1.2.0", "1.2.0.1"}, nil},
@@ -269,6 +270,7 @@ func TestRegexBest(t *testing.T) {
 		{"1.2-alpine", "1.4-alpine", []string{"1.3-alpine", "1.4-alpine", "1.9-bookworm", "1.5-rc1-alpine", "1.3.1-alpine"}, nil},
 		{"1.5-rc1-alpine", "1.5-alpine", []string{"1.5-rc2-bookworm", "1.5-alpine", "1.5-rc2-alpine"}, nil},
 		{"1.5-rc1-alpine", "1.5-rc2-alpine", []string{"1.5-rc2-alpine", "1.5-rc0-alpine"}, nil},
+		{"1.5-rc9-alpine", "1.5-rc10-alpine", []string{"1.5-rc10-alpine", "1.5-rc8-alpine"}, nil},
 	})
 	rev := `regex:^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)\.(?<build>\d+)(?:\.(?<revision>\d+))?$`
 	runBest(t, rev, []bestCase{

@@ -78,6 +78,49 @@ func compareHashicorp(a, b hcVersion) int {
 	return a.n - b.n
 }
 
+// comparePrerelease orders prerelease identifiers without a leading separator as
+// hashicorp/go-version's comparePrereleases does: "" (a release) is highest, dot-separated
+// identifiers compare numerically when both are numbers (so rc9 and rc10 compare as words,
+// bytewise), numbers sort below words, and a shorter list of equal identifiers is lower.
+func comparePrerelease(x, y string) int {
+	switch {
+	case x == y:
+		return 0
+	case x == "":
+		return 1
+	case y == "":
+		return -1
+	}
+	for {
+		dx, rx, okx := strings.Cut(x, ".")
+		dy, ry, oky := strings.Cut(y, ".")
+		if dx != dy {
+			nx, ny := isNum(dx), isNum(dy)
+			switch {
+			case nx && ny:
+				if c := compareNum(strings.TrimLeft(dx, "0"), strings.TrimLeft(dy, "0")); c != 0 {
+					return c
+				}
+				return strings.Compare(dx, dy)
+			case nx:
+				return -1
+			case ny:
+				return 1
+			}
+			return strings.Compare(dx, dy)
+		}
+		switch {
+		case !okx && !oky:
+			return 0
+		case !okx:
+			return -1
+		case !oky:
+			return 1
+		}
+		x, y = rx, ry
+	}
+}
+
 func hashicorpKind(cur, next hcVersion) dep.UpdateType {
 	switch {
 	case cur.parts[0] != next.parts[0]:
