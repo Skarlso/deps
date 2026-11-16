@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -14,8 +15,9 @@ import (
 	"time"
 )
 
-// probeScheme is the scheme used for platform probes; tests point it at TLS test servers.
-var probeScheme = "https"
+// defaultScheme is the scheme of the forge of a remote that names none (ssh and scp-style
+// remotes): it addresses and probes the host over https.
+const defaultScheme = "https"
 
 // FromEnv detects the platform from CI environment variables without network access.
 func FromEnv(getenv func(string) string) (Info, bool) {
@@ -137,9 +139,10 @@ func redactRemote(remote string) string {
 	return remote[:start+colon+1] + "xxxxx" + remote[start+at:] // the mask of url.URL.Redacted
 }
 
-// parseRemote splits a git remote URL into host (with port for http(s)), hostname and the
-// repository path: owner/repo, or group/subgroup/repo (GitLab).
-func parseRemote(remote string) (hostport, hostname, repo string, err error) {
+// parseRemote splits a git remote URL into the scheme its forge is served over ("" unless
+// the remote names http or https), host (with port for http(s)), hostname and the repository
+// path: owner/repo, or group/subgroup/repo (GitLab).
+func parseRemote(remote string) (scheme, hostport, hostname, repo string, err error) {
 	remote = strings.TrimSpace(remote)
 	var p string
 	switch {
@@ -150,21 +153,23 @@ func parseRemote(remote string) (hostport, hostname, repo string, err error) {
 			if ue, ok := errors.AsType[*url.Error](perr); ok {
 				perr = ue.Err
 			}
-			return "", "", "", fmt.Errorf("parse remote %q: %w", redactRemote(remote), perr)
+			return "", "", "", "", fmt.Errorf("parse remote %q: %w", redactRemote(remote), perr)
 		}
 		hostname = u.Hostname()
 		hostport = hostname
 		if u.Scheme == "https" || u.Scheme == "http" {
-			hostport = u.Host
+			// A self-hosted forge served over plain http, as http://gitea.lan:3000/o/r.git,
+			// answers neither probes nor API calls sent to https.
+			scheme, hostport = u.Scheme, u.Host
 		} else if u.Scheme != "ssh" {
-			return "", "", "", fmt.Errorf("unsupported remote %q", redactRemote(remote))
+			return "", "", "", "", fmt.Errorf("unsupported remote %q", redactRemote(remote))
 		}
 		p = u.Path
 	default:
 		at := strings.IndexByte(remote, '@')
 		colon := strings.IndexByte(remote, ':')
 		if at < 0 || colon < at {
-			return "", "", "", fmt.Errorf("unsupported remote %q", redactRemote(remote))
+			return "", "", "", "", fmt.Errorf("unsupported remote %q", redactRemote(remote))
 		}
 		hostname = remote[at+1 : colon]
 		hostport = hostname
@@ -172,19 +177,20 @@ func parseRemote(remote string) (hostport, hostname, repo string, err error) {
 	}
 	p = strings.TrimSuffix(strings.Trim(p, "/"), ".git")
 	if hostname == "" || !strings.Contains(p, "/") || strings.HasPrefix(p, "/") || strings.HasSuffix(p, "/") || strings.Contains(p, "//") {
-		return "", "", "", fmt.Errorf("unsupported remote %q", redactRemote(remote))
+		return "", "", "", "", fmt.Errorf("unsupported remote %q", redactRemote(remote))
 	}
-	return hostport, hostname, p, nil
+	return scheme, hostport, hostname, p, nil
 }
 
-// RemoteServerURL returns the https base URL of the forge of a git remote URL
-// (https://host[:port]), as Detect derives it without CI environment.
+// RemoteServerURL returns the base URL of the forge of a git remote URL
+// (scheme://host[:port]), as Detect derives it without CI environment: the scheme of the
+// remote, https for ssh and scp-style remotes.
 func RemoteServerURL(remote string) (string, error) {
-	hostport, _, _, err := parseRemote(remote)
+	scheme, hostport, _, _, err := parseRemote(remote)
 	if err != nil {
 		return "", err
 	}
-	return "https://" + hostport, nil
+	return cmp.Or(scheme, defaultScheme) + "://" + hostport, nil
 }
 
 // Detect determines the platform from CI env, else from the remote URL plus API probes.
@@ -193,11 +199,12 @@ func Detect(ctx context.Context, getenv func(string) string, remoteURL string, o
 	info, ok := FromEnv(getenv)
 	via := "ci environment"
 	if !ok {
-		hostport, hostname, repo, err := parseRemote(remoteURL)
+		remoteScheme, hostport, hostname, repo, err := parseRemote(remoteURL)
 		if err != nil {
 			return Info{}, err
 		}
-		info = Info{ServerURL: "https://" + hostport, Host: hostname, Repo: repo}
+		scheme := cmp.Or(remoteScheme, defaultScheme)
+		info = Info{ServerURL: scheme + "://" + hostport, Host: hostname, Repo: repo}
 		switch {
 		case o.Kind != "":
 			via = "--platform"
@@ -206,7 +213,7 @@ func Detect(ctx context.Context, getenv func(string) string, remoteURL string, o
 		case hostname == "gitlab.com":
 			info.Kind, via = GitLab, "remote host"
 		default:
-			k, err := probe(ctx, c, hostport)
+			k, err := probe(ctx, c, scheme, hostport)
 			if err != nil {
 				return Info{}, err
 			}
@@ -235,11 +242,11 @@ func Detect(ctx context.Context, getenv func(string) string, remoteURL string, o
 	return info, nil
 }
 
-// probe asks the host's version endpoints. GitLab goes first: GitLab redirects unknown paths
-// to its sign-in page, which would pass the Forgejo probe after the redirect, while Gitea,
-// Forgejo and GitHub have no /api/v4.
-func probe(ctx context.Context, c *http.Client, hostport string) (Kind, error) {
-	base := probeScheme + "://" + hostport
+// probe asks the host's version endpoints over the scheme of the remote. GitLab goes first:
+// GitLab redirects unknown paths to its sign-in page, which would pass the Forgejo probe
+// after the redirect, while Gitea, Forgejo and GitHub have no /api/v4.
+func probe(ctx context.Context, c *http.Client, scheme, hostport string) (Kind, error) {
+	base := scheme + "://" + hostport
 	// GitLab answers /api/v4/version 401 {"message":"401 Unauthorized"} without a token.
 	if probeOK(ctx, c, base+"/api/v4/version", true, true) {
 		return GitLab, nil

@@ -110,6 +110,7 @@ func TestListReposGitLab(t *testing.T) {
 func TestRemoteServerURL(t *testing.T) {
 	for remote, want := range map[string]string{
 		"https://git.example.com:3000/o/r.git": "https://git.example.com:3000",
+		"http://gitea.lan:3000/o/r.git":        "http://gitea.lan:3000",
 		"git@github.com:o/r.git":               "https://github.com",
 		"ssh://git@host:2222/o/r":              "https://host",
 	} {

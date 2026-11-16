@@ -106,26 +106,27 @@ func TestRunFromEnv(t *testing.T) {
 }
 
 func TestParseRemote(t *testing.T) {
-	tests := []struct{ in, hostport, host, repo string }{
-		{"https://git.example.com/o/r.git", "git.example.com", "git.example.com", "o/r"},
-		{"https://git.example.com:8443/o/r", "git.example.com:8443", "git.example.com", "o/r"},
-		{"git@github.com:o/r.git", "github.com", "github.com", "o/r"},
-		{"ssh://git@git.example.com:2222/o/r.git", "git.example.com", "git.example.com", "o/r"},
-		{"https://gitlab-ci-token:x@gl.example/grp/sub/r.git", "gl.example", "gl.example", "grp/sub/r"},
-		{"git@gitlab.com:grp/sub/r.git", "gitlab.com", "gitlab.com", "grp/sub/r"},
+	tests := []struct{ in, scheme, hostport, host, repo string }{
+		{"https://git.example.com/o/r.git", "https", "git.example.com", "git.example.com", "o/r"},
+		{"https://git.example.com:8443/o/r", "https", "git.example.com:8443", "git.example.com", "o/r"},
+		{"http://gitea.lan:3000/o/r.git", "http", "gitea.lan:3000", "gitea.lan", "o/r"},
+		{"git@github.com:o/r.git", "", "github.com", "github.com", "o/r"},
+		{"ssh://git@git.example.com:2222/o/r.git", "", "git.example.com", "git.example.com", "o/r"},
+		{"https://gitlab-ci-token:x@gl.example/grp/sub/r.git", "https", "gl.example", "gl.example", "grp/sub/r"},
+		{"git@gitlab.com:grp/sub/r.git", "", "gitlab.com", "gitlab.com", "grp/sub/r"},
 	}
 	for _, tt := range tests {
-		hp, h, r, err := parseRemote(tt.in)
-		if err != nil || hp != tt.hostport || h != tt.host || r != tt.repo {
-			t.Errorf("%s: got %q %q %q %v", tt.in, hp, h, r, err)
+		s, hp, h, r, err := parseRemote(tt.in)
+		if err != nil || s != tt.scheme || hp != tt.hostport || h != tt.host || r != tt.repo {
+			t.Errorf("%s: got %q %q %q %q %v", tt.in, s, hp, h, r, err)
 		}
 	}
 	for _, bad := range []string{"", "/local/path", "https://h/onlyowner", "file:///x/o/r", "https://h/%zz/r", "https://h/o//r"} {
-		if _, _, _, err := parseRemote(bad); err == nil {
+		if _, _, _, _, err := parseRemote(bad); err == nil {
 			t.Errorf("%q: want error", bad)
 		}
 	}
-	if _, _, _, err := parseRemote("https://h/%zz/r"); err == nil || !strings.HasPrefix(err.Error(), `parse remote "https://h/%zz/r": `) {
+	if _, _, _, _, err := parseRemote("https://h/%zz/r"); err == nil || !strings.HasPrefix(err.Error(), `parse remote "https://h/%zz/r": `) {
 		t.Errorf("parse error = %v", err)
 	}
 }
@@ -140,7 +141,7 @@ func TestParseRemoteRedactsCredentials(t *testing.T) {
 		"ftp://gitlab-ci-token:" + token + "@gl.example/o/r.git",
 		"gitlab-ci-token:" + token + "@gl.example:o/r.git",
 	} {
-		_, _, _, err := parseRemote(remote)
+		_, _, _, _, err := parseRemote(remote)
 		if err == nil {
 			t.Fatalf("%q: want error", remote)
 		}
@@ -235,6 +236,28 @@ func TestDetectProbes(t *testing.T) {
 				t.Fatalf("got %+v", info)
 			}
 		})
+	}
+}
+
+// A self-hosted forge served over plain http, as http://gitea.lan:3000/o/r.git, answers
+// neither probes nor API calls sent to https: the scheme of the remote carries into the
+// probe, the server URL and the API URL.
+func TestDetectHTTPRemote(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/version" {
+			http.NotFound(w, r)
+			return
+		}
+		io.WriteString(w, `{"version":"1.25"}`)
+	}))
+	defer srv.Close()
+	hostport := strings.TrimPrefix(srv.URL, "http://")
+	info, err := Detect(t.Context(), envFunc(nil), "http://"+hostport+"/o/r.git", Overrides{}, srv.Client())
+	if err != nil || info.Kind != Gitea || info.ServerURL != srv.URL || info.APIURL != srv.URL+"/api/v1" {
+		t.Fatalf("Detect = %+v, %v", info, err)
+	}
+	if got, err := RemoteServerURL("http://gitea.lan:3000/o/r.git"); err != nil || got != "http://gitea.lan:3000" {
+		t.Errorf("RemoteServerURL = %q, %v; want %q", got, err, "http://gitea.lan:3000")
 	}
 }
 
