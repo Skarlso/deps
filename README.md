@@ -305,14 +305,14 @@ Renovate covers more platforms and managers; deps trades that breadth for a sing
 
 ## Performance
 
-**Usual runtime: a few seconds and under 150 MB**, on 4 CPUs (`taskset -c 0-3`, `GOMAXPROCS=4`) like a standard CI runner — small enough for the cheapest runner you have. Across the twelve [benchmark repositories](docs/benchmarks.md), `deps plan` (scan, every registry lookup, patched diff) takes 0.2–4.8 s of CPU and 41–133 MB peak RSS; wall time is 1.1–12.5 s, and most of what exceeds the CPU time is registry latency, mostly container registries paging through tag lists.
+**Usual runtime: a few seconds and under 150 MB**, on 4 CPUs (`taskset -c 0-3`, `GOMAXPROCS=4`) like a standard CI runner — small enough for the cheapest runner you have. Across the twelve [benchmark repositories](docs/benchmarks.md), `deps plan` (scan, every registry lookup, patched diff) takes 0.3–1.8 s of CPU and 43–148 MB peak RSS; wall time is 0.8–13.4 s, and most of what exceeds the CPU time is registry latency, mostly container registries paging through tag lists.
 
 | Repository | Ecosystems | Tracked files | Updates found | Wall time | CPU time | Peak memory |
 |---|---|--:|--:|--:|--:|--:|
-| vercel/next.js | pnpm, Rust, Actions | 34,938 | 1,605 | 9.8 s | 4.5 s | 114 MB |
-| kubernetes/kubernetes | Go, containers | 31,757 | 150 | 1.7 s | 0.5 s | 73 MB |
-| backstage/backstage | Yarn workspaces | 12,657 | 1,245 | 6.5 s | 2.3 s | 104 MB |
-| spring-projects/spring-boot | Gradle, Maven | 11,983 | 35 | 1.1 s | 0.2 s | 41 MB |
+| vercel/next.js | pnpm, Rust, Actions | 35,112 | 1,619 | 2.2 s | 1.8 s | 148 MB |
+| kubernetes/kubernetes | Go, containers | 31,988 | 153 | 1.5 s | 0.6 s | 69 MB |
+| backstage/backstage | Yarn workspaces | 12,709 | 1,035 | 2.6 s | 1.5 s | 135 MB |
+| spring-projects/spring-boot | Gradle, Maven | 11,994 | 41 | 1.0 s | 0.4 s | 43 MB |
 
 One directory walk, lookups deduplicated and shared across dependencies, commits without a checkout or worktree. All twelve repositories and the measurement procedure: [benchmarks](docs/benchmarks.md).
 
