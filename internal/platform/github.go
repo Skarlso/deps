@@ -83,11 +83,15 @@ func (r *rest) doURL(ctx context.Context, method, url, label string, in, out any
 		req.Header.Set("Content-Type", "application/json")
 	}
 	setHeaders(req.Header)
-	resp, err := r.c.Do(req)
+	resp, err := keepMethod(method, r.c).Do(req)
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", method, label, err)
 	}
 	defer resp.Body.Close()
+	if loc := moved(resp); loc != "" {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return fmt.Errorf("%s %s: repository moved to %s: the request was not sent there, update the remote url", method, label, loc)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
 		return &statusError{method: method, path: label, status: resp.Status, code: resp.StatusCode, body: b}
@@ -100,6 +104,43 @@ func (r *rest) doURL(ctx context.Context, method, url, label string, in, out any
 		return fmt.Errorf("%s %s: decode: %w", method, label, err)
 	}
 	return nil
+}
+
+// keepMethod returns c for a read, and for a write a copy of c that stops a redirect
+// net/http would follow with another method than the request's own: 301, 302 and 303 answers
+// to anything but GET and HEAD are replayed as a body-less GET (RFC 9110 15.4.2 to 15.4.4,
+// net/http's redirectBehavior), so a repository that moved (GitHub answers 301 for a renamed
+// or transferred one, and the checkout's remote still names the old one) would turn every
+// write into a read of the new one: UpdatePR, ClosePR, UpdateIssue, SetPRMetadata and
+// RemovePRLabel ignore the body they get back and would report success while nothing was
+// written. The redirect is reported instead (see moved); replaying the write against the
+// Location the forge named would send the token and the write to a repository the caller
+// never asked for. A 307 or 308, which keeps method and body, is followed as before, with
+// the redirect policy of c (the credential handling of the shared client, httpx.NewClient).
+func keepMethod(method string, c *http.Client) *http.Client {
+	if method == http.MethodGet || method == http.MethodHead {
+		return c
+	}
+	safe := *c
+	follow := c.CheckRedirect
+	safe.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req.Method != via[len(via)-1].Method {
+			return http.ErrUseLastResponse
+		}
+		if follow == nil {
+			return nil
+		}
+		return follow(req, via)
+	}
+	return &safe
+}
+
+// moved returns the Location of a redirect keepMethod stopped, "" for any other response.
+func moved(resp *http.Response) string {
+	if resp.StatusCode < 300 || resp.StatusCode > 399 {
+		return ""
+	}
+	return resp.Header.Get("Location")
 }
 
 // apiRepo covers the repository JSON of GitHub and Gitea/Forgejo.

@@ -492,6 +492,99 @@ func TestGitHubNoToken(t *testing.T) {
 	}
 }
 
+// movedForge serves a repository that answers code with a Location naming its new owner, and
+// records every request it got as "METHOD path body".
+func movedForge(t *testing.T, code int) (*httptest.Server, func() []string) {
+	var mu sync.Mutex
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		got = append(got, strings.TrimSpace(r.Method+" "+r.URL.Path+" "+string(b)))
+		mu.Unlock()
+		if strings.HasPrefix(r.URL.Path, "/repos/old/r") {
+			w.Header().Set("Location", strings.Replace(r.URL.Path, "/repos/old/r", "/repos/new/r", 1))
+			w.WriteHeader(code)
+			return
+		}
+		if r.URL.Path == "/repos/new/r" {
+			io.WriteString(w, `{"default_branch":"main"}`)
+			return
+		}
+		io.WriteString(w, `{"number":5,"title":"t","head":{"ref":"deps/a"},"base":{"ref":"main"}}`)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(got)
+	}
+}
+
+// A repository that was renamed or transferred, whose checkout still names the old one, is
+// answered with 301 by GitHub. net/http replays a redirected POST, PATCH or PUT as a GET
+// without its body, so the write would read the moved repository back and look like a
+// success while nothing was written. The move is reported instead; a 307 or 308, which keeps
+// method and body, is still followed.
+func TestWriteToMovedRepository(t *testing.T) {
+	t.Run("net/http rewrites the redirected write", func(t *testing.T) {
+		srv, got := movedForge(t, http.StatusMovedPermanently)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, srv.URL+"/repos/old/r/pulls/5", strings.NewReader(`{"title":"t"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { resp.Body.Close() })
+		want := []string{`PATCH /repos/old/r/pulls/5 {"title":"t"}`, "GET /repos/new/r/pulls/5"}
+		if resp.StatusCode != http.StatusOK || !slices.Equal(got(), want) {
+			t.Fatalf("status %d, requests %q, want 200 and %q", resp.StatusCode, got(), want)
+		}
+	})
+
+	t.Run("the move is reported", func(t *testing.T) {
+		srv, got := movedForge(t, http.StatusMovedPermanently)
+		c := NewClient(Info{Kind: GitHub, APIURL: srv.URL, Repo: "old/r"}, "tok", srv.Client())
+		err := c.UpdatePR(t.Context(), 5, "t", "b", false)
+		const want = "PATCH /repos/old/r/pulls/5: repository moved to /repos/new/r/pulls/5"
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("UpdatePR error %v, want one holding %q", err, want)
+		}
+		if _, err := c.CreatePR(t.Context(), "deps/a", "main", "t", "b", false); err == nil || !strings.Contains(err.Error(), "repository moved to /repos/new/r/pulls") {
+			t.Fatalf("CreatePR error %v, want the move", err)
+		}
+		if reqs := got(); !slices.Equal(reqs, []string{`PATCH /repos/old/r/pulls/5 {"title":"t","body":"b"}`, `POST /repos/old/r/pulls {"title":"t","head":"deps/a","base":"main","body":"b"}`}) {
+			t.Fatalf("requests %q, want the writes to stop at the old repository", reqs)
+		}
+	})
+
+	t.Run("a 308 keeps method and body", func(t *testing.T) {
+		srv, got := movedForge(t, http.StatusPermanentRedirect)
+		c := NewClient(Info{Kind: GitHub, APIURL: srv.URL, Repo: "old/r"}, "tok", srv.Client())
+		if err := c.UpdatePR(t.Context(), 5, "t", "b", false); err != nil {
+			t.Fatalf("UpdatePR %v", err)
+		}
+		want := []string{`PATCH /repos/old/r/pulls/5 {"title":"t","body":"b"}`, `PATCH /repos/new/r/pulls/5 {"title":"t","body":"b"}`}
+		if reqs := got(); !slices.Equal(reqs, want) {
+			t.Fatalf("requests %q, want %q", reqs, want)
+		}
+	})
+
+	t.Run("a read still follows the redirect", func(t *testing.T) {
+		srv, got := movedForge(t, http.StatusMovedPermanently)
+		c := NewClient(Info{Kind: GitHub, APIURL: srv.URL, Repo: "old/r"}, "tok", srv.Client())
+		if b, err := c.DefaultBranch(t.Context()); err != nil || b != "main" {
+			t.Fatalf("DefaultBranch %q %v", b, err)
+		}
+		want := []string{"GET /repos/old/r", "GET /repos/new/r"}
+		if reqs := got(); !slices.Equal(reqs, want) {
+			t.Fatalf("requests %q, want %q", reqs, want)
+		}
+	})
+}
+
 func eqPtr(a, b *bool) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }
 
 func TestClientErrors(t *testing.T) {
