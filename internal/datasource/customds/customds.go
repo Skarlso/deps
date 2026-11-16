@@ -190,21 +190,41 @@ var keepNumbers = json.WithUnmarshalers(json.UnmarshalFromFunc(func(dec *jsontex
 	return errors.ErrUnsupported // decode into the preset type, or as usual
 }))
 
+// maxAliasNodes caps the nodes fromYAML expands aliases into: an alias inside its own anchor
+// (`a: &a [*a]`) would expand forever, and aliases repeating an anchor expand a document well
+// within MaxBody into exponentially many nodes. It is Renovate's budget for the same expansion
+// (the `maxAliasCount: 10000` its custom datasource passes to its yaml parser), and bounds only
+// what aliases add: a document without them is bounded by MaxBody already.
+const maxAliasNodes = 10000
+
 // fromYAML converts a yaml node to the selector's document model. Scalars stay text as written
 // (`1.20` is not the number 1.2), nulls are nil.
 func fromYAML(n *yaml.Node) (any, error) {
+	budget := maxAliasNodes
+	return convYAML(n, false, &budget)
+}
+
+// convYAML is fromYAML for a node that an alias expands to (aliased) or not, with the nodes
+// the aliases of the document may still expand into.
+func convYAML(n *yaml.Node, aliased bool, budget *int) (any, error) {
+	if aliased {
+		if *budget <= 0 {
+			return nil, errors.New("yaml aliases expand to too many nodes")
+		}
+		*budget--
+	}
 	switch n.Kind {
 	case yaml.DocumentNode:
 		if len(n.Content) == 0 {
 			return nil, nil
 		}
-		return fromYAML(n.Content[0])
+		return convYAML(n.Content[0], aliased, budget)
 	case yaml.AliasNode:
-		return fromYAML(n.Alias)
+		return convYAML(n.Alias, true, budget)
 	case yaml.MappingNode:
 		m := make(map[string]any, len(n.Content)/2)
 		for i := 0; i+1 < len(n.Content); i += 2 {
-			v, err := fromYAML(n.Content[i+1])
+			v, err := convYAML(n.Content[i+1], aliased, budget)
 			if err != nil {
 				return nil, err
 			}
@@ -214,7 +234,7 @@ func fromYAML(n *yaml.Node) (any, error) {
 	case yaml.SequenceNode:
 		s := make([]any, len(n.Content))
 		for i, c := range n.Content {
-			v, err := fromYAML(c)
+			v, err := convYAML(c, aliased, budget)
 			if err != nil {
 				return nil, err
 			}

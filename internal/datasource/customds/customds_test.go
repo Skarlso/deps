@@ -2,6 +2,7 @@ package customds
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -129,6 +130,8 @@ func TestFetchErrors(t *testing.T) {
 		{"object result", `{"releases":[{"version":{"a":1}}]}`, Spec{}, "yields an object, want strings"},
 		{"no versions", `{"releases":[]}`, Spec{}, "no versions"},
 		{"too large", strings.Repeat("1\n", MaxBody/2+1), Spec{Format: "plain"}, "response larger than 10485760 bytes"},
+		{"self-referential alias", "versions: &a [*a]\n", Spec{Format: "yaml", Versions: ".versions[]"}, "yaml aliases expand to too many nodes"},
+		{"alias fan-out", laughsYAML(), Spec{Format: "yaml", Versions: ".versions[]"}, "yaml aliases expand to too many nodes"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			srv := serve(t, c.body, nil)
@@ -167,6 +170,18 @@ func TestFetchErrors(t *testing.T) {
 	if _, err := s.Digest(t.Context(), dep.Dep{Name: "envtest"}, "1.0.0"); err == nil || !strings.Contains(err.Error(), "custom.x: digests are not supported") {
 		t.Errorf("Digest: %v", err)
 	}
+}
+
+// laughsYAML is a `billion laughs` document: 6 anchors of ten entries each, the last of which
+// expands into a million nodes.
+func laughsYAML() string {
+	var b strings.Builder
+	b.WriteString("a0: &a0 [" + strings.Repeat("'1.0.0', ", 9) + "'1.0.0']\n")
+	for i := 1; i < 6; i++ {
+		fmt.Fprintf(&b, "a%d: &a%d [%s*a%d]\n", i, i, strings.Repeat(fmt.Sprintf("*a%d, ", i-1), 9), i-1)
+	}
+	b.WriteString("versions: *a5\n")
+	return b.String()
 }
 
 type failing struct{}
