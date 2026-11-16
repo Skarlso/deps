@@ -13,6 +13,7 @@ import (
 	"go.yaml.in/yaml/v4"
 
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/config"
+	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/pattern"
 )
 
 // load translates renovate.json with content src in a temporary directory.
@@ -801,7 +802,7 @@ timezone: Europe/Berlin
 registryAliases:
   $CI_REGISTRY: registry.example.com
   ${HARBOR:-}/proxy: harbor.example.com/hub
-ignorePaths: [/foo/, '**/bar/**', /^x/]
+ignorePaths: [/foo/, '**/bar/**', //\^x//]
 automerge: true
 automergeStrategy: merge
 labels: [deps]
@@ -826,6 +827,41 @@ rules:` + defaultExclusions + "\n"
 	} {
 		if !slices.Contains(notes, n) {
 			t.Errorf("missing note %q in\n%s", n, strings.Join(notes, "\n"))
+		}
+	}
+}
+
+// TestLoadIgnorePathsSubstring: a Renovate ignorePaths entry matches a file whose path
+// contains it or which its minimatch glob matches (file-match.ts filterIgnoredFiles); there
+// is no regex form, so "/vendor/" must not be translated to the regex /vendor/, which would
+// also skip src/vendorized/go.mod.
+func TestLoadIgnorePathsSubstring(t *testing.T) {
+	res, err := load(t, `{"ignorePaths": ["/vendor/", "/^x/"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		IgnorePaths []string `yaml:"ignorePaths"`
+	}
+	if err := yaml.Unmarshal(res.YAML, &doc); err != nil {
+		t.Fatal(err)
+	}
+	l, err := pattern.CompileCaseSensitive(doc.IgnorePaths)
+	if err != nil {
+		t.Fatalf("ignorePaths %q: %v", doc.IgnorePaths, err)
+	}
+	for _, tt := range []struct {
+		file string
+		want bool
+	}{
+		{"src/vendor/k8s.io/api/go.mod", true},
+		{"src/vendorized/go.mod", false},
+		{"vendor/go.mod", false},
+		{"a/^x/go.mod", true},
+		{"x/go.mod", false},
+	} {
+		if got := l.Match(tt.file); got != tt.want {
+			t.Errorf("ignorePaths %q: match(%q) = %v, want %v", doc.IgnorePaths, tt.file, got, tt.want)
 		}
 	}
 }

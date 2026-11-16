@@ -1028,8 +1028,11 @@ func (t *translator) schedule(path string, v any) ([]string, bool) {
 	return out, true
 }
 
-// ignorePaths converts Renovate ignorePaths entries: plain strings match as substrings in
-// Renovate, so they become regexes.
+// ignorePaths converts Renovate ignorePaths entries: an entry matches a file whose path
+// contains it or which its minimatch glob matches (file-match.ts filterIgnoredFiles), so
+// entries without glob characters become deps substring regexes. Renovate has no regex form
+// here, and a glob starting with "/" never matches the relative paths deps walks, so such an
+// entry is a substring too (and must not be handed to deps as the regex it looks like).
 func (t *translator) ignorePaths(in []string) []string {
 	out := []string{}
 	for i, p := range in {
@@ -1038,12 +1041,7 @@ func (t *translator) ignorePaths(in []string) []string {
 		case strings.HasPrefix(p, "!"):
 			t.n.warn(path, "negation %q is not supported in ignorePaths; dropped", p)
 			continue
-		case strings.HasPrefix(p, "/"):
-			if _, _, ok := pattern.Regex(p); ok {
-				break
-			}
-			fallthrough
-		case !strings.ContainsAny(p, "*?[{"):
+		case strings.HasPrefix(p, "/"), !strings.ContainsAny(p, "*?[{"):
 			p = "/" + regexp.QuoteMeta(p) + "/"
 		}
 		if _, err := pattern.Compile([]string{p}); err != nil {
