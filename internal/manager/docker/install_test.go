@@ -140,6 +140,18 @@ func TestExtractInstallsScopes(t *testing.T) {
 			src:   "FROM ubuntu:24.04\nRUN apt install -t noble-updates curl=8.5.0-2ubuntu10.6 libc6:i386=2.39 vim- '^gnome' x=$V | tee log || true\n",
 			wants: []installWant{{2, "deb", "curl", "8.5.0-2ubuntu10.6", "", dep.SkipUnknownRegistry}, {2, "deb", "x", "$V", "", skipVariable}},
 		},
+		{
+			// The install runs under a variable assignment or a wrapper command.
+			name: "assignment and sudo prefixes",
+			src: "FROM alpine:3.20\nRUN sudo apk add bash=5.2.26-r0\n" +
+				"RUN APK_CACHE=/tmp sudo /usr/bin/apk add --no-cache curl=8.12.1-r0\nRUN FOO=1 BAR=2\n",
+			wants: []installWant{{2, "apk", "bash", "5.2.26-r0", alpine320, ""}, {3, "apk", "curl", "8.12.1-r0", alpine320, ""}},
+		},
+		{
+			name:  "apt under DEBIAN_FRONTEND",
+			src:   "FROM debian:trixie-slim\nRUN env DEBIAN_FRONTEND=noninteractive apt-get install -y curl=8.14.1-2\n",
+			wants: []installWant{{2, "deb", "curl", "8.14.1-2", "", dep.SkipUnknownRegistry}},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

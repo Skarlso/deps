@@ -149,9 +149,36 @@ var (
 		"-c": true, "--config-file": true}
 )
 
+// assignment reports whether the shell token s is a variable assignment (`NAME=value`),
+// which sets the environment of the command that follows it.
+func assignment(s string) bool {
+	for i := range len(s) {
+		switch c := s[i]; {
+		case c == '=':
+			return i > 0
+		case c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || i > 0 && c >= '0' && c <= '9':
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// cmdWrappers run the command that follows them, unchanged: `sudo apk add ...`, `env
+// DEBIAN_FRONTEND=noninteractive apt-get install ...`.
+var cmdWrappers = map[string]bool{"sudo": true, "env": true}
+
 // command extracts the packages of one shell command: `apk [opts] add [opts] pkgs...` or
-// `apt-get|apt [opts] install [opts] pkgs...`.
+// `apt-get|apt [opts] install [opts] pkgs...`. Leading variable assignments and wrappers
+// (cmdWrappers) are skipped, as Renovate's dockerfile manager looks past them too.
 func (x *extractor) command(cmd []token, st *stageState) {
+	for len(cmd) > 0 {
+		s := x.text(cmd[0])
+		if !cmdWrappers[s] && !assignment(s) {
+			break
+		}
+		cmd = cmd[1:]
+	}
 	if len(cmd) < 3 {
 		return
 	}
