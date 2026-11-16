@@ -353,7 +353,8 @@ func TestReleaseTime(t *testing.T) {
 		{"2.60.0", "2026-10-30T12:00:00Z"},
 		{"v2.60.0", "2026-10-30T12:00:00Z"},
 		{"1.0.0", ""},
-		{"3.0.0-rc1", ""}, // prereleases are not kept
+		{"3.0.0-rc1", "2026-11-01T00:00:00Z"}, // prereleases are listed, so their age is known
+		{"v3.0.0-rc1", "2026-11-01T00:00:00Z"},
 		{"9.9.9", ""},
 	} {
 		got, err := timer.ReleaseTime(t.Context(), d, c.version)

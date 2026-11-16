@@ -68,17 +68,17 @@ func otherTag(version string) string {
 	return "v" + version
 }
 
-// release returns the published, non-prerelease release of version: the tag equal to version,
-// or to version with a leading "v" added or removed.
-func release(l *githubapi.List, version string) (string, githubapi.Release, bool) {
+// release returns the tag of the published, non-prerelease release of version: the tag equal
+// to version, or to version with a leading "v" added or removed.
+func release(l *githubapi.List, version string) (string, bool) {
 	if rel, ok := l.Find(version); ok && !rel.Prerelease {
-		return version, rel, true
+		return version, true
 	}
 	tag := otherTag(version)
 	if rel, ok := l.Find(tag); ok && !rel.Prerelease {
-		return tag, rel, true
+		return tag, true
 	}
-	return tag, githubapi.Release{}, false
+	return tag, false
 }
 
 // AssetDigest returns the hex sha256 of asset in the release of version of repository name
@@ -90,7 +90,7 @@ func (s *Source) AssetDigest(ctx context.Context, name, version, asset string) (
 	}
 	var tag string
 	var ok bool
-	if err := s.with(ctx, name, version, func(l *githubapi.List) { tag, _, ok = release(l, version) }); err != nil {
+	if err := s.with(ctx, name, version, func(l *githubapi.List) { tag, ok = release(l, version) }); err != nil {
 		return "", err
 	}
 	if !ok {
@@ -115,7 +115,7 @@ func (s *Source) AssetByDigest(ctx context.Context, name, version, hex string) (
 	}
 	var tag string
 	var ok bool
-	if err := s.with(ctx, name, version, func(l *githubapi.List) { tag, _, ok = release(l, version) }); err != nil {
+	if err := s.with(ctx, name, version, func(l *githubapi.List) { tag, ok = release(l, version) }); err != nil {
 		return "", err
 	}
 	if !ok {
@@ -124,12 +124,17 @@ func (s *Source) AssetByDigest(ctx context.Context, name, version, hex string) (
 	return s.gh.AssetByDigest(ctx, r, tag, "sha256:"+hex)
 }
 
-// ReleaseTime implements datasource.Timer with the publication time of version's release (see
-// AssetDigest for the tag match) from the shared release list; zero when there is none.
+// ReleaseTime implements datasource.Timer with the publication time of version's release from
+// the shared release list, a prerelease too (Releases lists them, so a dep pinned at one is
+// bumped to a newer one and its age gates the update); the tag matches exactly or with a
+// leading "v" added or removed. Zero when there is none.
 func (s *Source) ReleaseTime(ctx context.Context, d dep.Dep, version string) (time.Time, error) {
 	var published time.Time
 	err := s.with(ctx, d.Name, version, func(l *githubapi.List) {
-		_, rel, _ := release(l, version)
+		rel, ok := l.Find(version)
+		if !ok {
+			rel, _ = l.Find(otherTag(version))
+		}
 		published = rel.Published
 	})
 	return published, err
