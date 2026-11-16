@@ -166,6 +166,18 @@ func TestResolve(t *testing.T) {
 	}
 }
 
+// Renovate marks registryAliases mergeable (lib/config/options/index.ts), so mergeChildConfig
+// merges a preset's aliases with the repository's own instead of replacing them.
+func TestResolveRegistryAliasesMerge(t *testing.T) {
+	got, _ := resolveWith(t, map[string]string{
+		"default:testAliases": `{registryAliases: {'$A': 'a.example.com', '$B': 'preset.example.com'}}`,
+	}, `{extends: [':testAliases'], registryAliases: {'$B': 'b.example.com'}}`)
+	want := map[string]any{"$A": "a.example.com", "$B": "b.example.com"}
+	if !reflect.DeepEqual(got["registryAliases"], want) {
+		t.Errorf("registryAliases = %v, want %v", got["registryAliases"], want)
+	}
+}
+
 // The built-in preset table is valid JSON5 and every preset resolves.
 func TestBuiltinPresets(t *testing.T) {
 	for name := range builtin {

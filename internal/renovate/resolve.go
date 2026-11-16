@@ -105,7 +105,7 @@ var mergeableKeys = map[string]bool{
 	"customDatasources": true, "major": true, "minor": true, "patch": true, "pin": true, "digest": true,
 	"pinDigest": true, "rollback": true, "replacement": true, "vulnerabilityAlerts": true,
 	"lockFileMaintenance": true, "managerFilePatterns": true, "addLabels": true, "commitTrailers": true,
-	"prBodyNotes": true,
+	"prBodyNotes": true, "registryAliases": true,
 }
 
 func mergeable(key string) bool {
