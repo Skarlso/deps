@@ -67,7 +67,9 @@ func TestMatch(t *testing.T) {
 		"bitbucket-pipelines.yaml":      true,
 		"azure-pipelines.yml":           false, // azure-pipelines
 		"ci/azure/deploy-pipelines.yml": false,
-		"my-app-ci-pipelines.yml":       false, // the prefix is one word
+		"my-app-ci-pipelines.yml":       true, // Renovate's `*` also matches `-` and `.`
+		"deploy-prod-pipelines.yml":     true,
+		"my.app-pipelines.yaml":         true,
 		"pipelines.yml":                 false,
 		"bitbucket-pipelines.json":      false,
 	} {
