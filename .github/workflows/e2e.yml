@@ -43,7 +43,7 @@ jobs:
           fi
       - uses: actions/checkout@v7.0.1
         if: steps.token.outputs.set
-      - uses: actions/setup-go@v7.0.0
+      - uses: actions/setup-go@v7.1.0
         if: steps.token.outputs.set
         with:
           go-version-file: go.mod

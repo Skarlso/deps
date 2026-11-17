@@ -63,7 +63,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           path: base
-      - uses: actions/setup-go@v7.0.0
+      - uses: actions/setup-go@v7.1.0
         with:
           go-version-file: pr/go.mod
           cache: false # shared Go cache volumes on the runners, see ci.yml
