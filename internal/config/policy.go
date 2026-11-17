@@ -50,8 +50,11 @@ type Policy struct {
 	Registry      string        // built-in registry group (VcpkgGroup) that set the initial Group, "" = none
 	// PRSettings are the PR settings its updates carry.
 	dep.PRSettings
-	Kind   dep.UpdateType // update type of a PolicyFor result, "" for Policy
-	MinAge time.Duration  // minimum release age of new versions, 0 = off
+	// CommitTypeSet records that a rule or a group set CommitType explicitly, so the
+	// built-in commit type of a lockfile-only update does not override it.
+	CommitTypeSet bool
+	Kind          dep.UpdateType // update type of a PolicyFor result, "" for Policy
+	MinAge        time.Duration  // minimum release age of new versions, 0 = off
 	// TimestampRequired (minimumReleaseAgeBehaviour timestamp-required): with a MinAge, a
 	// version whose release time is unknown is held back.
 	TimestampRequired bool
@@ -609,7 +612,7 @@ func (c *Config) policy(d dep.Dep, kind dep.UpdateType, age time.Duration) Polic
 			p.SecurityGroup = r.SecurityGroup
 		}
 		if r.CommitType != "" {
-			p.CommitType = r.CommitType
+			p.CommitType, p.CommitTypeSet = r.CommitType, true
 		}
 		if r.CommitScope != nil {
 			p.CommitScope = *r.CommitScope
@@ -637,7 +640,7 @@ func (c *Config) policy(d dep.Dep, kind dep.UpdateType, age time.Duration) Polic
 		p.apply(&g.Settings)
 		p.GroupSlug = g.Slug
 		if g.CommitType != "" {
-			p.CommitType = g.CommitType
+			p.CommitType, p.CommitTypeSet = g.CommitType, true
 		}
 		if g.CommitScope != nil {
 			p.CommitScope = *g.CommitScope

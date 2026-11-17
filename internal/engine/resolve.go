@@ -1673,6 +1673,12 @@ func (r *resolver) resolve(t *Trace, vulns func() []Vuln) ([]dep.Update, error) 
 // unifyShared applies it again to an update it lowers.
 func applyPolicy(up *dep.Update, kp *config.Policy) {
 	up.PRSettings = kp.PRSettings
+	if up.Lockfile && !kp.CommitTypeSet {
+		// A lockfile-only update changes no manifest, so it is a chore whatever the
+		// dependency is, as Renovate's :semanticPrefixFixDepsChoreOthers commits it
+		// (matchJsonata: isLockfileUpdate = true). An explicit commitType still wins.
+		up.CommitType = config.CommitChore
+	}
 	up.BranchTopicPrefix = config.ExpandBranchPrefix(kp.AdditionalBranchPrefix, up.Dep)
 	if len(up.Advisories) == 0 {
 		up.Group, up.GroupSlug, up.Schedule, up.SecurityGroup = kp.Group, kp.GroupSlug, kp.Schedule, ""

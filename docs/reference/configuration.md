@@ -1664,7 +1664,7 @@ rules:
 
 ### `rules[].commitType`
 
-Conventional commit type of commit and PR titles; default fix for production deps (gomod direct, npm, cargo, poetry, pub and bundler dependencies, composer require, pep621 project.dependencies, pipenv packages, elm direct and dependencies, julia deps, mix prod, gleam dependencies), chore otherwise. Security updates always use fix.
+Conventional commit type of commit and PR titles; default fix for production deps (gomod direct, npm, cargo, poetry, pub and bundler dependencies, composer require, pep621 project.dependencies, pipenv packages, elm direct and dependencies, julia deps, mix prod, gleam dependencies), chore otherwise. A lockfile-only update is a chore whatever the dep is, unless a rule or group sets commitType. Security updates always use fix.
 
 - **Type:** string
 - **Values:** `fix`, `chore`, `build`, `ci`, `docs`, `feat`, `perf`, `refactor`, `revert`, `style`, `test`

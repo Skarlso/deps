@@ -179,6 +179,42 @@ func TestRangeStrategy(t *testing.T) {
 	}
 }
 
+// A lockfile-only update is a chore even for a production dependency (npm "dependencies",
+// which deps commits as fix), as Renovate's :semanticPrefixFixDepsChoreOthers does; an
+// explicit rules[].commitType still wins.
+func TestLockfileOnlyCommitsAsChore(t *testing.T) {
+	for _, tt := range []struct{ name, cfg, lock, manifest string }{
+		{name: "default", lock: "chore", manifest: "fix"},
+		{name: "rule", cfg: "rules:\n  - names: [a]\n    commitType: build\n", lock: "build", manifest: "build"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root, cfg := setup(t, tt.cfg, map[string]string{"web/package.json": rangePkg, "web/package-lock.json": rangeLock})
+			o := Options{Managers: []manager.Manager{npm.New()}, Datasources: map[string]Datasource{"npm": rangeReleases}}
+			res, err := Resolve(t.Context(), root, cfg, env, o)
+			if err != nil || len(res.Errors) > 0 {
+				t.Fatal(err, res.Errors)
+			}
+			var got []string
+			for _, u := range res.Updates {
+				if u.Dep.Name != "a" {
+					continue
+				}
+				want := tt.manifest
+				if u.Lockfile {
+					want = tt.lock
+				}
+				if u.CommitType != want {
+					t.Errorf("a %s lockfile=%v: commitType %q, want %q", u.NewVersion, u.Lockfile, u.CommitType, want)
+				}
+				got = append(got, u.NewVersion)
+			}
+			if len(got) != 2 {
+				t.Fatalf("updates of a = %v, want the lockfile-only and the range update", got)
+			}
+		})
+	}
+}
+
 func TestRangeStrategyTrace(t *testing.T) {
 	root, cfg := setup(t, "", map[string]string{"web/package.json": `{"dependencies": {"a": "^1.0.0"}}`})
 	var traces []Trace

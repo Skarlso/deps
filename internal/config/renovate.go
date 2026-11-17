@@ -54,6 +54,8 @@ var RenovateOptions = []RenovateOption{
 		Doc: " (`> 1 year`, `< 30 days`; a month is 30 days, a year 365): the release time of the current version, looked up only for deps the rule's other selectors match; unknown times match no rule"},
 	{Keys: []string{"matchSourceUrls"},
 		Doc: "not supported: the source repository is only known after a per-dep (for docker: per-image config) lookup; match the packages with `names` instead"},
+	{Keys: []string{"matchJsonata"},
+		Doc: "not supported: deps has no expression matcher, so such a rule is dropped. The one `config:recommended` carries, `isLockfileUpdate = true` of `:semanticPrefixFixDepsChoreOthers`, needs no rule: deps commits a lockfile-only update as `chore` as well"},
 	{Keys: []string{"matchDatasources"}, Scope: "rules[]", To: "datasources",
 		Doc: " (`golang-version`, `github-tags`, `github-release-attachments`, `node`, `bitbucket-tags`, `azure-tags`, `bitbucket-server-tags` (`git-tags`) and `github-digest` (`git-refs`) accepted; `artifactory`, `gitlab-releases`, `gitlab-tags`, `gitea-releases`, `gitea-tags`, `forgejo-releases`, `forgejo-tags` and `endoflife-date` for custom-manager deps; `apk` and `deb` for custom-manager deps and the Dockerfile `RUN apk add`/`apt-get install` pins; `sbt-package` and `sbt-plugin` are the sbt manager's, with library names carrying the Scala suffix as Renovate's `packageName` does: `org.typelevel:cats-core_2.13`; `hex`, `hexpm-bob` and `glasskube-packages` under their Renovate names); `github-runners` (with `matchDepTypes: [github-runner]`) selects the `runs-on:` runner labels of the github-actions manager, as in Renovate"},
 	{Keys: []string{"matchBaseBranches"}, Scope: "rules[]", To: "baseBranches",

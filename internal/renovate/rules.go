@@ -357,6 +357,13 @@ func (t *translator) rule(origin string, r map[string]any) {
 				t.n.warn(origin, "matches no base branch deps supports; rule dropped")
 				return
 			}
+		case "matchJsonata":
+			if s, _ := strs(r[k]); len(s) == 1 && strings.ReplaceAll(s[0], " ", "") == "isLockfileUpdate=true" {
+				t.n.info(origin, "deps already commits lockfile-only updates as chore; rule dropped")
+				return
+			}
+			t.n.warn(origin, "matchJsonata has no deps equivalent; rule dropped")
+			return
 		case "stabilityDays":
 		default:
 			if strings.HasPrefix(k, "match") || strings.HasPrefix(k, "exclude") {
