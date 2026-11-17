@@ -2,28 +2,28 @@
 class Deps < Formula
   desc "Renovate-style dependency update pull requests from one static binary"
   homepage "https://git.jakob-moeller.cloud/jakobmoellerdev/deps"
-  version "0.17.0"
+  version "0.18.0"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.17.0/deps_darwin_arm64.tar.xz"
-      sha256 "fe18260cf7e21bc8c71a627202461287d005bcc713d4d38fc7af7b17e9054aa2"
+      url "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.0/deps_darwin_arm64.tar.xz"
+      sha256 "cd5ed208b46cef887f3131b5c591726c3bdad7316f2d3f3b6a2bcd71ce1c6d77"
     end
     on_intel do
-      url "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.17.0/deps_darwin_amd64.tar.xz"
-      sha256 "abe95be77bf79110cf78fefe9dbeff0fe7113ed5a1e9fc7b385c46f1cd694091"
+      url "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.0/deps_darwin_amd64.tar.xz"
+      sha256 "2b5a28ecdeb896767edaf98a489bd637a5a8829d739d0f600376d7628b542d45"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.17.0/deps_linux_arm64.tar.xz"
-      sha256 "76e6622ebcb597e1fad3a95f3a776d92981ebe50bb756eb830e90cb8d1d19f95"
+      url "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.0/deps_linux_arm64.tar.xz"
+      sha256 "932535cf5dae42695156abb88ce416ec6b70cdbbea3b1b9db68fbebb18d54d7b"
     end
     on_intel do
-      url "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.17.0/deps_linux_amd64.tar.xz"
-      sha256 "a4751fa7b4df463007a055063b8621f2bef824d675de4989cab179ae830b21dd"
+      url "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.0/deps_linux_amd64.tar.xz"
+      sha256 "0f326ae65004065d8a7943061f3afc30e51a6f0b99d74a4f18fcee49e93b9ecf"
     end
   end
 
