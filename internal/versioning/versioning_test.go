@@ -430,7 +430,7 @@ func TestParseScheme(t *testing.T) {
 		t.Error("(?P<name>) groups")
 	}
 	for in, want := range map[string]string{
-		"calver":                      `must be one of tag, go, docker, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api or regex:<RE2>, got "calver"`,
+		"calver":                      `must be one of tag, go, docker, node, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api or regex:<RE2>, got "calver"`,
 		"regex:(":                     "regex: invalid RE2 regexp: error parsing regexp",
 		`regex:^(?<build>\d+)$`:       "regex: must have a (?<major>...), (?<minor>...) or (?<patch>...) group",
 		`regex:(?<major>\d)(?<x>\d)`:  `regex: unknown group "x" (allowed: major, minor, patch, build, revision, prerelease, compatibility)`,

@@ -1555,10 +1555,10 @@ When no rule sets it, all five update types are allowed, except `major` for [tra
 
 ### `rules[].versioning`
 
-Versioning scheme overriding the manager's: tag, go, docker, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api, or regex:\<RE2> with named groups major, minor, patch, build, revision, prerelease and compatibility, at least one of major, minor and patch; (?\<name>) and (?P\<name>) syntax both work. Cannot be combined with updateTypes.
+Versioning scheme overriding the manager's: tag, go, docker, node, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api, or regex:\<RE2> with named groups major, minor, patch, build, revision, prerelease and compatibility, at least one of major, minor and patch; (?\<name>) and (?P\<name>) syntax both work. Cannot be combined with updateTypes.
 
 - **Type:** string
-- **Pattern:** `^(tag|go|docker|semver|loose|cargo|pep440|hashicorp|maven|ivy|ruby|conda|composer|julia|bazel-module|nuget|rpm|apk|deb|pub|hex|nixpkgs|glasskube|kubernetes-api|regex:.+)$`
+- **Pattern:** `^(tag|go|docker|node|semver|loose|cargo|pep440|hashicorp|maven|ivy|ruby|conda|composer|julia|bazel-module|nuget|rpm|apk|deb|pub|hex|nixpkgs|glasskube|kubernetes-api|regex:.+)$`
 
 The scheme validates the current value, ranks candidates, classifies update kinds, converts versions for `allow`, and computes security fixes. A current value that the new scheme cannot parse is skipped as `non-version value "<v>"`.
 
@@ -1567,6 +1567,7 @@ The scheme validates the current value, ranks candidates, classifies update kind
 | `tag` | `^(v?)\d+(\.\d+)?(\.\d+)?$` | candidates need the same prefix and the same number of parts (`v4` → `v5`, `v4.1.0` → `v4.2.0`); no suffixes or prereleases |
 | `go` | Go module semver | no pseudo-versions; prereleases only from a prerelease; `+incompatible` only from `+incompatible`; same major except v0 → v1 |
 | `docker` | `^(v?)(\d+(\.\d+)*)(.*)$` | same prefix, part count and suffix (`1.27-alpine` → `1.28-alpine`); `latest` and commit hashes (7–40 lowercase hex digits, not all decimal: `3a22eba`) are invalid |
+| `node` | as `docker` | the Node.js release lines on top of `docker`: an odd major is a Current release that never goes LTS, so it is a candidate only for a version already on that major (`24` → `26`, never `25`; `25.1.0` → `25.2.0`). Renovate's `node` versioning, which `config:recommended` applies to `@types/node` and `node` images (`workarounds:typesNodeVersioning`, `workarounds:nodeDockerVersioning`) |
 | `semver` | Masterminds loose semver | any precision; prereleases only from a prerelease; keeps the `v` style; the default of `custom[]` and npm |
 | `loose` | 1–6 numeric parts, optional `v`, optional `-`/`_` suffix | the suffix counts as a prerelease. Missing parts compare as 0 (`1877` < `1877.25`); then fewer parts sort below more (`1.2` < `1.2.0`). Any precision is a candidate, so combine it with an `allow` regex. |
 | `cargo` | `MAJOR[.MINOR[.PATCH[-pre][+build]]]`, no `v` | candidates need the same number of parts (`0.4` → `0.5`); prereleases only from a prerelease. Update types follow Cargo's compatibility: leaving the range of the leftmost non-zero part is `major` (`0.4` → `0.5`, `0.0.3` → `0.0.4`), a minor change of a `1.x` version `minor`, anything else `patch`. The default of cargo deps |
@@ -1858,11 +1859,11 @@ Dependency name; required in regex mode unless match has a (?P\<name>), (?P\<dep
 
 ### `custom[].versioning`
 
-Versioning scheme of the matched versions: tag, go, docker, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api or regex:\<RE2> (see rules[].versioning); annotation and regex-group versioning fields accept the scheme names. Without it, each dep uses its datasource's versioning (rpm for rpm, apk for apk, deb for deb, pep440 for python-version and galaxy-collection, pub for dart, hex for hex, maven for maven, ivy for sbt-package and sbt-plugin, tag for galaxy, docker for github-runners, glasskube for glasskube-packages, kubernetes-api for kubernetes-api, cargo for crate, conda for conda, nuget for nuget and dotnet-version, ruby for rubygems and ruby-version, composer for packagist, julia for julia-registry, hashicorp for terraform-provider and terraform-module, maven for gradle-version, jenkins-plugins and clojure, bazel-module for bazel, tag for azure-pipelines-tasks, orb and bitrise, the vcpkg port regex for vcpkg), else semver.
+Versioning scheme of the matched versions: tag, go, docker, node, semver, loose, cargo, pep440, hashicorp, maven, ivy, ruby, conda, composer, julia, bazel-module, nuget, rpm, apk, deb, pub, hex, nixpkgs, glasskube, kubernetes-api or regex:\<RE2> (see rules[].versioning); annotation and regex-group versioning fields accept the scheme names. Without it, each dep uses its datasource's versioning (rpm for rpm, apk for apk, deb for deb, pep440 for python-version and galaxy-collection, pub for dart, hex for hex, maven for maven, ivy for sbt-package and sbt-plugin, tag for galaxy, docker for github-runners, glasskube for glasskube-packages, kubernetes-api for kubernetes-api, cargo for crate, conda for conda, nuget for nuget and dotnet-version, ruby for rubygems and ruby-version, composer for packagist, julia for julia-registry, hashicorp for terraform-provider and terraform-module, maven for gradle-version, jenkins-plugins and clojure, bazel-module for bazel, tag for azure-pipelines-tasks, orb and bitrise, the vcpkg port regex for vcpkg), else semver.
 
 - **Type:** string
 - **Default:** `semver`
-- **Pattern:** `^(tag|go|docker|semver|loose|cargo|pep440|hashicorp|maven|ivy|ruby|conda|composer|julia|bazel-module|nuget|rpm|apk|deb|pub|hex|nixpkgs|glasskube|kubernetes-api|regex:.+)$`
+- **Pattern:** `^(tag|go|docker|node|semver|loose|cargo|pep440|hashicorp|maven|ivy|ruby|conda|composer|julia|bazel-module|nuget|rpm|apk|deb|pub|hex|nixpkgs|glasskube|kubernetes-api|regex:.+)$`
 
 Accepts the schemes of [`rules[].versioning`](#rulesversioning). Without it, each dep uses its datasource's default: `rpm` for rpm deps, `apk` for apk deps, `deb` for deb deps, `hex` for hex deps, `glasskube` for glasskube-packages deps, else `semver`. A marker's `versioning=`, a `versioning` group or a JSONata result's `versioning` overrides the entry's.
 

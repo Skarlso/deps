@@ -1715,3 +1715,27 @@ func TestLoadForgeDatasources(t *testing.T) {
 		t.Errorf("custom:\n%s", got)
 	}
 }
+
+// workarounds:all (part of config:recommended) is translated down to the two Node.js
+// versioning workarounds deps can express; the rest is reported as having no equivalent.
+func TestLoadWorkaroundsNodeVersioning(t *testing.T) {
+	res, err := load(t, `{"extends": ["workarounds:all"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules := section(t, res, "rules")
+	for _, want := range []string{"@types/node", "versioning: node", "/(?:^|/)node$/", "!calico/node"} {
+		if !strings.Contains(rules, want) {
+			t.Errorf("rules lack %q:\n%s", want, rules)
+		}
+	}
+	var found bool
+	for _, n := range res.Notes {
+		if strings.Contains(n.Msg, "only the Node.js versioning workarounds") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no note about the untranslatable workarounds: %v", res.Notes)
+	}
+}

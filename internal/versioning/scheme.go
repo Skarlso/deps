@@ -59,7 +59,7 @@ type Candidate struct {
 }
 
 // Names are the versioning scheme names; "regex:<RE2>" schemes come on top (RegexPrefix).
-var Names = []string{"tag", "go", "docker", "semver", "loose", "cargo", "pep440", "hashicorp", "maven", "ivy", "ruby", "conda", "composer", "julia", "bazel-module", "nuget", "rpm", "apk", "deb", "pub", "hex", Nixpkgs, "glasskube", "kubernetes-api"}
+var Names = []string{"tag", "go", "docker", "node", "semver", "loose", "cargo", "pep440", "hashicorp", "maven", "ivy", "ruby", "conda", "composer", "julia", "bazel-module", "nuget", "rpm", "apk", "deb", "pub", "hex", Nixpkgs, "glasskube", "kubernetes-api"}
 
 // RegexPrefix starts a regex scheme name: "regex:" followed by an RE2 regexp with named groups.
 const RegexPrefix = "regex:"
@@ -108,6 +108,7 @@ var schemes = map[string]Scheme{
 	"tag":       impl[Tag]{parse: ParseTag, compat: tagCompat, cmp: CompareTag, kind: TagKind, semver: Tag.Semver, major: Tag.major},
 	"go":        impl[goVersion]{parse: parseGo, compat: goCompat, cmp: compareGo, kind: goKind, semver: goVersion.semver, major: goVersion.majorNum},
 	"docker":    impl[dockerTag]{parse: parseDocker, compat: dockerCompat, cmp: compareDocker, kind: dockerKind, semver: dockerTag.semver, major: dockerTag.major},
+	"node":      impl[dockerTag]{parse: parseDocker, compat: nodeCompat, cmp: compareDocker, kind: dockerKind, semver: dockerTag.semver, major: dockerTag.major},
 	"semver":    semverScheme{impl[semverVersion]{parse: parseSemver, compat: semverCompat, cmp: compareSemver, kind: semverKind, semver: semverVersion.semver, major: semverMajor}},
 	"loose":     impl[looseVersion]{parse: parseLoose, compat: looseCompat, cmp: compareLoose, kind: looseKind, semver: looseVersion.semver, major: looseVersion.major},
 	"cargo":     impl[cargoVersion]{parse: parseCargo, compat: cargoCompat, cmp: compareCargo, kind: cargoKind, semver: cargoVersion.semver, major: cargoMajor},

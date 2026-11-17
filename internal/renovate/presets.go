@@ -1,12 +1,21 @@
 package renovate
 
+// workaroundsAll is Renovate's workarounds:all, the preset config:recommended extends.
+const workaroundsAll = "workarounds:all"
+
 // builtin holds Renovate's built-in presets used by translation, copied from renovatebot/renovate lib/config/presets/internal/ (main, 2026-11-05) without descriptions.
 // Source commit: 432153f71f127c9258d0174447a89fb3c3d23d03.
 var builtin = map[string]string{
-	"abandonments:recommended":                             `{"packageRules":[{"abandonmentThreshold":"1 year","matchPackageNames":["*"]},{"abandonmentThreshold":null,"matchDatasources":["npm"],"matchPackageNames":["@types/*"]},{"abandonmentThreshold":"5 years","matchDatasources":["npm"],"matchPackageNames":["eslint-plugin-no-only-tests"]},{"abandonmentThreshold":"6 years","matchDatasources":["npm"],"matchPackageNames":["lodash"]}]}`,
-	"config:best-practices":                                `{"extends":["config:recommended","docker:pinDigests","helpers:pinGitHubActionDigests",":configMigration",":pinDevDependencies","abandonments:recommended","security:minimumReleaseAgeNpm",":maintainLockFilesWeekly"]}`,
-	"config:js-app":                                        `{"extends":["config:recommended",":pinAllExceptPeerDependencies"]}`,
-	"config:js-lib":                                        `{"extends":["config:recommended",":pinOnlyDevDependencies"]}`,
+	"abandonments:recommended": `{"packageRules":[{"abandonmentThreshold":"1 year","matchPackageNames":["*"]},{"abandonmentThreshold":null,"matchDatasources":["npm"],"matchPackageNames":["@types/*"]},{"abandonmentThreshold":"5 years","matchDatasources":["npm"],"matchPackageNames":["eslint-plugin-no-only-tests"]},{"abandonmentThreshold":"6 years","matchDatasources":["npm"],"matchPackageNames":["lodash"]}]}`,
+	"config:best-practices":    `{"extends":["config:recommended","docker:pinDigests","helpers:pinGitHubActionDigests",":configMigration",":pinDevDependencies","abandonments:recommended","security:minimumReleaseAgeNpm",":maintainLockFilesWeekly"]}`,
+	"config:js-app":            `{"extends":["config:recommended",":pinAllExceptPeerDependencies"]}`,
+	"config:js-lib":            `{"extends":["config:recommended",":pinOnlyDevDependencies"]}`,
+	// workaroundsAll and the two node presets below are the workarounds Renovate's
+	// workarounds:all extends that deps can express; the entry is Renovate's list reduced to
+	// them (resolver.preset reports the rest).
+	workaroundsAll:                                         `{"extends":["workarounds:typesNodeVersioning","workarounds:nodeDockerVersioning"]}`,
+	"workarounds:typesNodeVersioning":                      `{"packageRules":[{"matchManagers":["npm"],"matchPackageNames":["@types/node"],"versioning":"node"}]}`,
+	"workarounds:nodeDockerVersioning":                     `{"packageRules":[{"matchDatasources":["docker"],"matchPackageNames":["/(?:^|/)node$/","!calico/node","!docker.io/calico/node","!ghcr.io/devcontainers/features/node","!kindest/node","!docker.io/kindest/node"],"versioning":"node"}]}`,
 	"config:recommended":                                   `{"extends":[":dependencyDashboard",":semanticPrefixFixDepsChoreOthers",":ignoreModulesAndTests","group:monorepos","group:recommended","mergeConfidence:age-confidence-badges","replacements:all","workarounds:all","security:php2shell","helpers:forgejoDigestChangelogs","helpers:giteaDigestChangelogs","helpers:githubDigestChangelogs","helpers:gitlabDigestChangelogs","helpers:goXPackagesChangelogLink","helpers:goXPackagesNameLink","helpers:renovateChangelog"]}`,
 	"default:approveMajorUpdates":                          `{"packageRules":[{"dependencyDashboardApproval":true,"matchUpdateTypes":["major"]}]}`,
 	"default:assignAndReview":                              `{"extends":[":assignee({{arg0}})",":reviewer({{arg0}})"]}`,

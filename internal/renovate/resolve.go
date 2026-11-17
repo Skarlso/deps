@@ -271,7 +271,14 @@ func (r *resolver) preset(e string, i int) (map[string]any, error) {
 			return nil, nil
 		case prBodyPreset(ref.repo, name):
 			return nil, nil
-		case slices.Contains([]string{"workarounds", "helpers"}, ref.repo),
+		case ref.repo == "workarounds" && builtin[name] == "":
+			r.notes.info(e, "no deps equivalent")
+			return nil, nil
+		case name == workaroundsAll:
+			// Renovate's workarounds:all extends two dozen presets; builtin holds the two
+			// deps can express (Node.js versioning), so the rest is reported here.
+			r.notes.info(e, "only the Node.js versioning workarounds have a deps equivalent")
+		case ref.repo == "helpers",
 			name == "security:openssf-scorecard", name == "security:php2shell":
 			r.notes.info(e, "no deps equivalent")
 			return nil, nil
