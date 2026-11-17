@@ -10,7 +10,7 @@ Each of these is reported when it occurs; the rest of the config still applies.
 |---|---|
 | `extends` from npm packages, URLs, relative files | skipped (warning) |
 | `replacements:<name>` presets deps' built-in list lacks (`spectre-cli-to-spectre-console-cli`, nuget; `material-ui-to-mui`, `messageFormat-to-scoped`, defined in Renovate's code), `replacementNameTemplate` other than `{{{replace '<prefix>' '<new prefix>' packageName}}}`, `replacementVersionTemplate` | skipped / the field is dropped (warning) |
-| built-in `workarounds:*`, `helpers:*` (except `pinGitHubActionDigests`), `security:openssf-scorecard` | skipped (info) |
+| built-in `workarounds:*` (no `node` versioning for `@types/node` and `node` images, no Java LTS or Bitnami/Ubuntu/Grafana image versioning), `helpers:*` (except `pinGitHubActionDigests`), `security:openssf-scorecard`, `security:php2shell` | skipped (info) |
 | PR-body presets deps covers on its own: `helpers:*DigestChangelogs` (deps links the commit-to-commit diff of every digest update, images via their `org.opencontainers.image.revision` label), `helpers:goXPackages*` and `helpers:renovateChangelog` (deps shows those repositories' release notes), `mergeConfidence:*` (a Renovate service) | skipped silently |
 | `matchCurrentValue` globs (`1.*`), `matchJsonata`, `matchSourceUrls`, `matchRepositories`, `matchBaseBranches` with only globs, other unknown `match*`/`exclude*` keys | the rule is dropped |
 | glob entries of `matchBaseBranches` and `baseBranchPatterns` | the entry is dropped (warning) |
@@ -30,6 +30,7 @@ Each of these is reported when it occurs; the rest of the config still applies.
 | custom managers with `customType` other than `regex` and `jsonata`, `matchStringsStrategy: combination`/`recursive`, `{{templates}}` in `datasourceTemplate`/`depNameTemplate`/`packageNameTemplate`/`versioningTemplate`, `currentValueTemplate`, `extractVersionTemplate` (regex managers; in jsonata managers a template using helpers or blocks such as `{{#if}}`/`{{replace}}`), `autoReplaceStringTemplate` | the custom manager is dropped |
 | custom datasources with templated `defaultRegistryUrlTemplate`, `format: html`, several or other JSONata `transformTemplates` | the datasource is dropped, and every custom manager and rule that uses it |
 | `fileMatch`/`managerFilePatterns` on built-in managers | ignored: deps' managers find their files themselves |
+| manager-scoped settings (`nuget: {ignorePaths}` from `:ignoreModulesAndTests`, `gitlabci: {registryAliases}`, …) | the block becomes a rule for that manager and keeps the keys deps has; the others are ignored. A manager-scoped `ignorePaths` does not narrow the global one, so files the global list hides stay hidden for that manager too |
 | `hostRules` | ignored: credentials come from the environment (`deps help environment`) |
 | other `vulnerabilityAlerts` keys (`labels`, `automerge`, `prConcurrentLimit`, `rangeStrategy`, `vulnerabilityFixStrategy: highest`, a non-null `minimumReleaseAge`, …) | ignored: deps has no settings for security updates only (info for labels, assignees, reviewers and PR texts, warning otherwise); `schedule` is ignored by both |
 | PR and commit texts (`prBody*`, `prTitleStrict`, `commitBody`, …), onboarding and dashboard texts | ignored (info) |

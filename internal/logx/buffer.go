@@ -32,6 +32,18 @@ func WithBuffer(ctx context.Context, b *Buffer) context.Context {
 	return context.WithValue(ctx, bufferKey{}, b)
 }
 
+// Buffered reports whether a record logged with ctx is held in a buffer (WithBuffer) that
+// has not been flushed yet, so it comes out later as part of that block.
+func Buffered(ctx context.Context) bool {
+	b, ok := ctx.Value(bufferKey{}).(*Buffer)
+	if !ok {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return !b.flushed
+}
+
 // hold adds r to b unless b was flushed already, reporting whether it did.
 func (b *Buffer) hold(h *BufferHandler, r slog.Record) bool {
 	b.mu.Lock()

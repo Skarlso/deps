@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/config"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/dep"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/engine"
+	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/logx"
 )
 
 // githubActions makes the next command run as a GitHub Actions step with dir as workspace.
@@ -301,6 +304,47 @@ func TestAnnotatorLimitAndEscaping(t *testing.T) {
 	}
 	if n := strings.Count(b.String(), "::warning "); n != maxAnnotations {
 		t.Errorf("%d warning annotations, want %d", n, maxAnnotations)
+	}
+}
+
+// A warning the actions format annotates is written once: the annotation is a log line of
+// its own. Records held for a PR block, and records past the annotation budget, are still
+// written by the handler below.
+func TestAnnotatedWarningNotWrittenTwice(t *testing.T) {
+	var b bytes.Buffer
+	env := map[string]string{"GITHUB_ACTIONS": "true"}
+	a := newAnnotator(func(k string) string { return env[k] }, &b, "")
+	a.on = true
+	w := logx.NewWriter(&b)
+	next := logx.NewHandler(logx.Actions, w, logx.Options{Level: slog.LevelWarn})
+	log := slog.New(&annotatingHandler{Handler: logx.NewBufferHandler(next, func(io.Writer) slog.Handler { return next }), a: a})
+
+	log.Warn("careful", "repo", "o/r")
+	if want := "::warning title=deps::careful repo=o/r\n"; b.String() != want {
+		t.Errorf("got %q, want only the annotation %q", b.String(), want)
+	}
+
+	b.Reset()
+	buf := &logx.Buffer{}
+	log.WarnContext(logx.WithBuffer(t.Context(), buf), "held", "repo", "o/r")
+	if want := "::warning title=deps::held repo=o/r\n"; b.String() != want {
+		t.Errorf("got %q, want the annotation before the block %q", b.String(), want)
+	}
+	if err := buf.Flush(&b, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), "WRN held") {
+		t.Errorf("the held record is missing from its block:\n%q", b.String())
+	}
+
+	b.Reset()
+	for range maxAnnotations {
+		log.Warn("budget")
+	}
+	b.Reset()
+	log.Warn("over budget")
+	if out := b.String(); strings.Contains(out, "::warning") || !strings.Contains(out, "WRN over budget") {
+		t.Errorf("a warning past the annotation budget must still be logged:\n%q", out)
 	}
 }
 

@@ -416,7 +416,7 @@ Updates container image references in Dockerfiles, Compose files, workflows, act
 
 **YAML files.**
 
-Other YAML is parsed document by document. A file that does not parse (typically a Helm template) is read line by line instead: each block-style `image: <value>` line is a `kubernetes` dep (a plain or quoted value; `{{` makes it a `template value`), and the parse error is logged (info level when such lines exist, else debug).
+Other YAML is parsed document by document. A file that does not parse (typically a Helm template) is read line by line instead: each block-style `image: <value>` line is a `kubernetes` dep (a plain or quoted value; `{{` makes it a `template value`), and the parse error is logged (info level when a line yields a dep to look up, else debug: a template whose images are all `{{ … }}` values has nothing to update).
 
 **Names.**
 

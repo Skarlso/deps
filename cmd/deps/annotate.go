@@ -14,6 +14,7 @@ import (
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/config"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/dep"
 	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/engine"
+	"git.jakob-moeller.cloud/jakobmoellerdev/deps/internal/logx"
 )
 
 // maxAnnotations is how many error, how many warning and how many notice annotations GitHub
@@ -85,11 +86,11 @@ func (a *annotator) path(base, p string) string {
 	return filepath.ToSlash(rel)
 }
 
-// command prints one annotation unless its kind's budget is used up; line and col are
-// 1-based, 0 when unknown.
-func (a *annotator) command(kind, file string, line, col int, msg string) {
+// command prints one annotation unless its kind's budget is used up, reporting whether it
+// wrote one; line and col are 1-based, 0 when unknown.
+func (a *annotator) command(kind, file string, line, col int, msg string) bool {
 	if a == nil || !a.on {
-		return
+		return false
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -101,7 +102,7 @@ func (a *annotator) command(kind, file string, line, col int, msg string) {
 		n = &a.notices
 	}
 	if *n >= maxAnnotations {
-		return
+		return false
 	}
 	*n++
 	var props []string
@@ -122,6 +123,7 @@ func (a *annotator) command(kind, file string, line, col int, msg string) {
 	}
 	props = append(props, "title=deps")
 	fmt.Fprintf(a.w, "::%s %s::%s\n", kind, strings.Join(props, ","), escapeData(msg))
+	return true
 }
 
 // error annotates err: a dependency error at its file and line (a warning when its lookup was
@@ -209,8 +211,8 @@ var (
 func escapeData(s string) string     { return dataEscaper.Replace(s) }
 func escapeProperty(s string) string { return propertyEscaper.Replace(s) }
 
-// annotatingHandler passes records to the next handler and annotates warnings and errors
-// with their message and attributes.
+// annotatingHandler annotates warnings and errors with their message and attributes, and
+// passes to the next handler every record the annotation does not already carry.
 type annotatingHandler struct {
 	slog.Handler
 	a     *annotator
@@ -233,7 +235,13 @@ func (h *annotatingHandler) Handle(ctx context.Context, r slog.Record) error {
 		if r.Level >= slog.LevelError {
 			kind = "error"
 		}
-		h.a.command(kind, "", 0, 0, b.String())
+		// The annotation is a log line of its own (the runner renders it as
+		// "Warning: <message>"), so an annotated record is not written a second time.
+		// Two exceptions: a record held for a PR block (logx.Buffered) keeps its place
+		// in that block, and one past the annotation budget was not written at all.
+		if h.a.command(kind, "", 0, 0, b.String()) && !logx.Buffered(ctx) {
+			return nil
+		}
 	}
 	return h.Handler.Handle(ctx, r)
 }

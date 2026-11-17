@@ -488,12 +488,34 @@ func (t *translator) untranslated(path, k string, v any) {
 	case silentKey(k):
 	case k == "hostRules":
 		t.hostRules(path, v)
+	case k == "postUpdateOptions":
+		t.postUpdateOptions(path, v)
 	case behavior && b.differs(v):
 		t.n.warn(path, "no deps equivalent: %s", b.msg)
 	case isInfoKey(k):
 		t.n.info(path, "no deps equivalent; ignored")
 	default:
 		t.n.warn(path, "not supported; ignored")
+	}
+}
+
+// postUpdateOptions notes Renovate's postUpdateOptions at path (top level or a rule): the Go
+// ones deps applies on every run, the others have no equivalent.
+func (t *translator) postUpdateOptions(path string, v any) {
+	l, _ := strs(v)
+	for _, o := range l {
+		switch o {
+		case "gomodUpdateImportPaths":
+			t.n.info(path, "deps default (gomod.updateImportPaths: true)")
+		case "gomodTidy":
+			t.n.info(path, "gomodTidy: deps always runs go mod tidy after a gomod change")
+		case "gomodTidyE", "gomodTidy1.17":
+			t.n.info(path, "%s: deps always runs go mod tidy, without -e or -compat", o)
+		case "gomodVendor":
+			t.n.info(path, "gomodVendor: deps always vendors a module with vendor/modules.txt again")
+		default:
+			t.n.info(path, "%s: no deps equivalent; ignored", o)
+		}
 	}
 }
 
@@ -840,14 +862,7 @@ func (t *translator) translate(cfg map[string]any) omap {
 		t.n.warn("platformAutomerge", "deps always uses platform auto-merge")
 	}
 	if v, ok := get("postUpdateOptions"); ok {
-		l, _ := strs(v)
-		for _, o := range l {
-			if o == "gomodUpdateImportPaths" {
-				t.n.info("postUpdateOptions", "deps default (gomod.updateImportPaths: true)")
-			} else {
-				t.n.info("postUpdateOptions", "%s: no deps equivalent; ignored", o)
-			}
-		}
+		t.postUpdateOptions("postUpdateOptions", v)
 	}
 
 	if v, ok := get("customDatasources"); ok {

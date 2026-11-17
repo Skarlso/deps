@@ -47,11 +47,21 @@ func (x *extractor) manifests(p *yamlspan.Parsed) {
 	if err != nil {
 		x.deps = nil
 		x.imageLines()
+		// Info only when a line carries an image deps can look up: a Helm template whose
+		// `image:` lines are all template values ({{ .Values.image… }}) yields nothing to
+		// update, so its parse error is of interest to a debug run only.
 		level := slog.LevelDebug
-		if len(x.deps) > 0 {
+		updatable := 0
+		for _, d := range x.deps {
+			if d.Skip == "" {
+				updatable++
+			}
+		}
+		if updatable > 0 {
 			level = slog.LevelInfo
 		}
-		slog.Log(context.Background(), level, "unparsable yaml, image lines read one by one", "file", x.file, "images", len(x.deps), "err", err)
+		slog.Log(context.Background(), level, "unparsable yaml, image lines read one by one",
+			"file", x.file, "images", len(x.deps), "updatable", updatable, "err", err)
 	}
 }
 
