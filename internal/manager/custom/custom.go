@@ -340,8 +340,8 @@ func (m *customManager) annotations(file string, src []byte) []dep.Dep {
 
 // renovateMarker builds the pending dep of a Renovate marker's key=value fields. Name is
 // packageName, else depName; registryUrl is the Source of registryURLDatasources deps and
-// ignored otherwise, as are unknown keys. Without a versioning field docker deps use docker
-// versioning, others the entry's versioning, else their datasource's (depVersioning).
+// ignored otherwise, as are unknown keys. Without a versioning field the dep takes the entry's
+// versioning, else its datasource's (depVersioning).
 func (m *customManager) renovateMarker(file string, lineNo int, fields string) dep.Dep {
 	d := dep.Dep{Manager: Name, DepType: DepTypeAnnotation, File: file, Line: lineNo}
 	var depName, pkgName, scheme, registry string
@@ -373,14 +373,7 @@ func (m *customManager) renovateMarker(file string, lineNo int, fields string) d
 		return d
 	}
 	m.classify(&d)
-	switch {
-	case scheme != "":
-		d.Versioning = scheme
-	case d.Datasource == "docker":
-		d.Versioning = "docker"
-	default:
-		d.Versioning = m.depVersioning(d.Datasource)
-	}
+	d.Versioning = cmp.Or(scheme, m.depVersioning(d.Datasource))
 	if d.Skip == "" && !m.knownVersioning(d.Versioning, d.Datasource) {
 		d.Skip = fmt.Sprintf("unknown versioning %q", d.Versioning)
 	}
@@ -393,7 +386,8 @@ func (m *customManager) renovateMarker(file string, lineNo int, fields string) d
 }
 
 // depVersioning is the versioning of a dep of datasource ds that sets none: the entry's, else
-// the datasource's default (config.DefaultCustomVersioning: rpm for rpm, apk for apk, else semver).
+// the datasource's default (config.DefaultCustomVersioning: docker for docker, rpm for rpm,
+// apk for apk, else semver).
 func (m *customManager) depVersioning(ds string) string {
 	if m.versioning != "" {
 		return m.versioning

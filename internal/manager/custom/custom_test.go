@@ -105,7 +105,7 @@ func TestAnnotations(t *testing.T) {
 				{6, "docker", "nginx", "", "docker", "1.27.3-alpine", "", ""},
 				{8, "git-tags", "github.com/actions/checkout", "https://github.com/actions/checkout", "semver", "v6.0.1", "", ""},
 				{10, "git-tags", "https://gitea.com/o/r", "https://gitea.com/o/r", "semver", "1.2.3-rc.1+b5", "", ""},
-				{12, "docker", "alpine", "", "semver", "", "", "no version on next line"},
+				{12, "docker", "alpine", "", "docker", "", "", "no version on next line"},
 				{13, "go", "example.com/m", "", "semver", "v1.0.0", "", ""},
 				{15, "cpan", "Foo", "", "semver", "", "", `unknown datasource "cpan"`},
 				{17, "go", "example.com/v", "", "bogus", "", "", `unknown versioning "bogus"`},
@@ -578,6 +578,12 @@ func TestRegexRenovateGroups(t *testing.T) {
 		"# renovate: datasource=golang-version depName=go\nGO_VERSION = \"1.27.1\"\n" +
 		"# renovate: datasource=github-tags depName=x packageName=o/r versioning=tag\nREF = \"1.2.3\"\n"
 	m := one(t, config.Custom{Files: []string{"x"}, Match: `# renovate: datasource=docker depName=(?P<depName>\S+)\s+\w+_IMAGE=\S+?:(?P<currentValue>[^@\s]+)@(?P<currentDigest>sha256:[a-f0-9]{64})`, Datasource: "docker", Versioning: "docker"})
+	check(t, src, extract(t, m, src), DepTypeRegex, []want{
+		{2, "docker", "goodwithtech/dockle", "", "docker", "v0.4.15", digest, ""},
+	})
+	// Without versioning (Renovate's customManagers without versioningTemplate) a docker dep
+	// still uses docker versioning, so a tag's compatibility suffix is kept.
+	m = one(t, config.Custom{Files: []string{"x"}, Match: `# renovate: datasource=docker depName=(?P<depName>\S+)\s+\w+_IMAGE=\S+?:(?P<currentValue>[^@\s]+)@(?P<currentDigest>sha256:[a-f0-9]{64})`, Datasource: "docker"})
 	check(t, src, extract(t, m, src), DepTypeRegex, []want{
 		{2, "docker", "goodwithtech/dockle", "", "docker", "v0.4.15", digest, ""},
 	})
