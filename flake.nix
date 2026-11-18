@@ -8,23 +8,23 @@
     let
       # The release binaries per Nix system. deps' nix manager moves the urls, hashes and the
       # version to each new release in one pull request.
-      version = "0.18.0";
+      version = "0.18.1";
       downloads = {
         x86_64-linux = {
-          url = "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.0/deps_linux_amd64.tar.xz";
-          hash = "sha256-DzJq5lAEBl2KeUMGHzr8MOUabwuZ10pPGPzuSek7ns8=";
+          url = "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.1/deps_linux_amd64.tar.xz";
+          hash = "sha256-4kKU40UVwjMWtKkWNunrDaYYWMXOMpg8YN741M1tK8I=";
         };
         aarch64-linux = {
-          url = "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.0/deps_linux_arm64.tar.xz";
-          hash = "sha256-kyU1z12uQmlRVqu4jOQW7GtwzbvqOxudto++uxjVTXs=";
+          url = "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.1/deps_linux_arm64.tar.xz";
+          hash = "sha256-Q3X/xiCdCr8kFkj9ykZk2JdPfPMTqZ6cvqdqueK8vFk=";
         };
         x86_64-darwin = {
-          url = "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.0/deps_darwin_amd64.tar.xz";
-          hash = "sha256-K1oo7N64lnZ+2vmKSJvWN6Wogp1znQ9gA3bXYotULUU=";
+          url = "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.1/deps_darwin_amd64.tar.xz";
+          hash = "sha256-bhE3aiwWx3OMmjgj6xpd/I5oY8fD3QzS3QM7/enycAw=";
         };
         aarch64-darwin = {
-          url = "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.0/deps_darwin_arm64.tar.xz";
-          hash = "sha256-zV7SCLRs74h/MTG1xZFybDva1zFvLT87aivNcc4cbXc=";
+          url = "https://git.jakob-moeller.cloud/jakobmoellerdev/deps/releases/download/v0.18.1/deps_darwin_arm64.tar.xz";
+          hash = "sha256-VwizFfdedw6teeKQGuon5sPGAZp8HEGYya4GuQemjVo=";
         };
       };
       systems = builtins.attrNames downloads;
